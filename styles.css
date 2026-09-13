@@ -27,7 +27,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .canvas-controls button { position: relative; width: 32px; min-width: 32px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .canvas-controls button svg { width: 14px; height: 14px; flex: none; }
 .canvas-controls span { width: 100%; color: var(--ct-text-3); font-size: 10px; text-align: center; }
-.sidebar { grid-row: 1 / -1; display: flex; flex-direction: column; gap: 0; min-height: 0; padding: 6px 12px; border-right: 1px solid #e5e7eb; background: #f8f9fa; }
+.sidebar { position: relative; grid-row: 1 / -1; display: flex; flex-direction: column; gap: 0; min-height: 0; padding: 6px 12px; border-right: 1px solid #e5e7eb; background: #f8f9fa; }
 .new-workspace { display: flex; width: calc(100% - 4px); min-height: auto; height: 38px; align-items: center; justify-content: center; gap: 6px; margin: 0 2px 8px; border-color: rgba(0,0,0,.1); border-radius: 12px; background: #fff; padding: 8px 16px; color: #111827; font-size: 14px; font-weight: 500; }
 .new-session-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .new-workspace:hover { border-color: rgba(0,0,0,.16); background: #f7f7f8; color: #111827; }
@@ -59,7 +59,12 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .rail-add svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.6; }
 /* A popover for one row, or for the workspace a new canvas goes in. */
 .rail-menu { position: absolute; z-index: 30; top: 26px; right: 4px; min-width: 132px; max-width: calc(100% - 8px); border: 1px solid var(--ct-border, #e3e8ef); border-radius: 10px; background: var(--ct-surface, #fff); padding: 4px; box-shadow: 0 8px 22px rgba(15,23,42,.16); }
-.rail-chooser { right: auto; left: 4px; }
+/* The chooser belongs to the button that opens it, so it is positioned against that button
+   rather than against the rail: both an absolute box and an absolutely positioned ancestor have
+   to be named, or `top`/`left` resolve against the viewport and the popover lands in the corner
+   of the window. */
+.rail-new { position: relative; }
+.rail-chooser { top: calc(100% + 6px); right: 2px; left: 2px; min-width: 0; }
 .rail-menu-title { margin: 0; padding: 5px 8px 6px; color: #8a97a8; font-size: 11px; }
 .rail-menu-row { display: block; width: 100%; min-height: 26px; border: 0; border-radius: 6px; background: transparent; padding: 4px 8px; color: #374151; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .rail-menu-row:hover { background: #f3f4f6; color: #111827; }

@@ -422,3 +422,16 @@ test('a question is only ever sent down the branch path', () => {
   has(app, 'await branchOff(parent, draft.atSeq, draft.anchorId, text, branchPosition)', 'the draft card sends through it')
   has(app, 'await branchOff(thread, atSeq, card.id, text, position)', 'and so does the panel')
 })
+
+test('every rail popover is anchored to the box it belongs to', () => {
+  // An absolutely positioned box resolves against its nearest positioned ancestor. The workspace
+  // chooser sat directly under `.sidebar`, which had no `position` at all, so its `top`/`left`
+  // resolved against the viewport: it opened in the corner of the window rather than under the
+  // button that opened it. Geometry is not something a unit test can see, so the anchors are what
+  // is locked here.
+  has(css, '.sidebar { position: relative;', 'the rail is not a positioning context')
+  has(css, '.rail-new { position: relative; }', 'the new-canvas button is not one either')
+  has(css, '.rail-group, .tree-item { position: relative; }', 'the rows are not positioning contexts')
+  has(css, '.rail-chooser { top: calc(100% + 6px);', 'the chooser does not hang off the button')
+  has(app, '<div class="rail-new">', 'the chooser is not rendered beside its button')
+})

@@ -1655,7 +1655,7 @@ function sidebarHtml(rail) {
     const body = group.canvases.length > 0 ? rows : `<p class="tree-empty">${group.loading ? '正在载入…' : '还没有画布'}</p>`
     return `<section class="rail-group">${workspaceRow}<nav class="thread-tree">${body}</nav></section>`
   }).join('')
-  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button><div class="rail-head"><span>工作区</span><button class="rail-add" type="button" data-action="add-workspace" aria-label="添加工作区" title="添加工作区"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></svg></button></div>${groups || '<p class="tree-empty">暂未同步工作区</p>'}${state.railChooser ? railChooserHtml(rail) : ''}`
+  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><div class="rail-new"><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button>${state.railChooser ? railChooserHtml(rail) : ''}</div><div class="rail-head"><span>工作区</span><button class="rail-add" type="button" data-action="add-workspace" aria-label="添加工作区" title="添加工作区"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></svg></button></div>${groups || '<p class="tree-empty">暂未同步工作区</p>'}`
 }
 
 // The rail is patched like every other region, with one exception: a rename box that is already on
@@ -3246,7 +3246,12 @@ app.addEventListener('click', async event => {
       }
       return
     }
-    if (button.dataset.action === 'toggle-sidebar') { state.sidebarCollapsed = !state.sidebarCollapsed; render() }
+    if (button.dataset.action === 'toggle-sidebar') {
+      state.sidebarCollapsed = !state.sidebarCollapsed
+      state.railMenu = null
+      state.railChooser = false
+      render()
+    }
     if (button.dataset.action === 'toggle-rail-group') {
       const id = button.dataset.workspace
       if (id === undefined) return
