@@ -41,10 +41,33 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .rail-caret svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .rail-caret.is-open { transform: rotate(90deg); }
 .rail-workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-tree { display: grid; gap: 3px; margin-left: 10px; overflow: auto; padding-bottom: 6px; }
-.tree-row { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; background: transparent; color: #4b5563; text-align: left; }
+/* The row's "more" rides over its own right edge: the row is a button, so this cannot be inside it.
+   It only appears for the row the pointer is on, or the one whose box is open. */
+.rail-group, .tree-item { position: relative; }
+.rail-more { position: absolute; z-index: 2; top: 3px; right: 2px; display: grid; width: 20px; height: 20px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: #94a3b8; cursor: pointer; opacity: 0; }
+.rail-more svg { width: 12px; height: 12px; }
+.workspace-row:hover + .rail-more, .rail-more:focus-visible, .tree-item:hover .rail-more, .rail-more:hover { opacity: 1; }
+.rail-more:hover { background: #e5e7eb; color: #111827; }
+/* The name gives the button room even when it is invisible, so the text never runs under it. */
+.workspace-row, .tree-row { padding-right: 22px; }
+.rail-rename { width: 100%; min-width: 0; height: 24px; border: 1px solid var(--ct-accent, #3478f6); border-radius: 6px; background: #fff; padding: 0 7px; color: #111827; font: inherit; font-size: 12px; }
+.rail-rename:focus { outline: none; }
+.workspace-row.is-editing, .tree-item.is-editing { padding: 0; }
+.rail-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 4px 2px; color: #7c8798; font-size: 12px; }
+.rail-add { display: grid; width: 22px; height: 22px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: #64748b; cursor: pointer; }
+.rail-add:hover { background: #e5e7eb; color: #111827; }
+.rail-add svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.6; }
+/* A popover for one row, or for the workspace a new canvas goes in. */
+.rail-menu { position: absolute; z-index: 30; top: 26px; right: 4px; min-width: 132px; max-width: calc(100% - 8px); border: 1px solid var(--ct-border, #e3e8ef); border-radius: 10px; background: var(--ct-surface, #fff); padding: 4px; box-shadow: 0 8px 22px rgba(15,23,42,.16); }
+.rail-chooser { right: auto; left: 4px; }
+.rail-menu-title { margin: 0; padding: 5px 8px 6px; color: #8a97a8; font-size: 11px; }
+.rail-menu-row { display: block; width: 100%; min-height: 26px; border: 0; border-radius: 6px; background: transparent; padding: 4px 8px; color: #374151; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.rail-menu-row:hover { background: #f3f4f6; color: #111827; }
+.thread-tree { display: grid; gap: 3px; margin-left: 10px; overflow: visible; padding-bottom: 6px; }
+.tree-item { display: flex; min-width: 0; }
+.tree-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; border: 0; border-radius: 6px; background: transparent; color: #4b5563; text-align: left; }
 .tree-row:hover { background: #f3f4f6; }
-.tree-row.active { background: #e5e7eb; color: #111827; font-weight: 650; }
+.tree-item.active .tree-row { background: #e5e7eb; color: #111827; font-weight: 650; }
 .tree-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .tree-row i { margin-left: auto; color: #94a3b8; font-size: 10px; font-style: normal; }
 .tree-dot, .topic-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread-color, #374151); }
@@ -373,6 +396,16 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 [data-theme="dark"] .workspace-row:hover { background: #26282d; }
 [data-theme="dark"] .workspace-row.active { color: #e6e8eb; }
 [data-theme="dark"] .rail-caret { color: #737a83; }
+[data-theme="dark"] .rail-more { color: #737a83; }
+[data-theme="dark"] .rail-more:hover { background: #2a2d33; color: #e6e8eb; }
+[data-theme="dark"] .rail-add { color: #8f959e; }
+[data-theme="dark"] .rail-add:hover { background: #2a2d33; color: #e6e8eb; }
+[data-theme="dark"] .rail-rename { border-color: var(--ct-accent); background: #15171b; color: #e6e8eb; }
+[data-theme="dark"] .rail-menu { border-color: var(--ct-border); background: var(--ct-surface); }
+[data-theme="dark"] .rail-menu-row { color: #b6bcc6; }
+[data-theme="dark"] .rail-menu-row:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .rail-head { color: #8f959e; }
+[data-theme="dark"] .tree-item.active .tree-row { background: #2a2d33; color: #e6e8eb; }
 [data-theme="dark"] .tree-row { color: #a7adb5; }
 [data-theme="dark"] .tree-row:hover { background: #26282d; }
 [data-theme="dark"] .tree-row.active { background: #2a2d33; color: #e6e8eb; }
@@ -566,7 +599,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .new-workspace:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
 .tree-row { border-radius: var(--ct-radius-tool); color: var(--ct-text-2); }
 .tree-row:hover { background: var(--ct-surface-3); color: var(--ct-text-1); }
-.tree-row.active { background: var(--ct-accent-soft); color: var(--ct-accent-ink); font-weight: 650; }
+.tree-item.active .tree-row { background: var(--ct-accent-soft); color: var(--ct-accent-ink); font-weight: 650; }
 .tree-row i { color: var(--ct-text-3); }
 .topbar { background: var(--ct-surface); border-bottom: 1px solid var(--ct-border); }
 .canvas-controls button { border-radius: var(--ct-radius-tool); box-shadow: var(--ct-shadow-card); }
@@ -633,7 +666,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 [data-theme="dark"] .composer-tool:hover { background: var(--ct-surface-3); }
 [data-theme="dark"] .sidebar { background: var(--ct-surface-3); }
 [data-theme="dark"] .topbar { background: var(--ct-surface); }
-[data-theme="dark"] .tree-row.active { background: var(--ct-accent-soft); color: var(--ct-accent-ink); }
+[data-theme="dark"] .tree-item.active .tree-row { background: var(--ct-accent-soft); color: var(--ct-accent-ink); }
 
 /* --------------------------------------------------- panel text gutter */
 /* The head holds one thing now: the two buttons. It was written as a title row

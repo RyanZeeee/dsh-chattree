@@ -100,7 +100,7 @@ const state = {
   dshWorkspaces: [], selectedDshWorkspaceId: null,
   historyBySession: new Map(), historyRequests: new Map(), pendingReplies: new Map(), pendingRpc: new Map(), liveReplies: new Map(),
   draft: null, error: '', workspaceLoad: 0, branchAnchors: new Map(savedBranchAnchors), cardPositions: new Map(savedCardPositions), cardPositionsResetAt: 0, collapsedCardIds: new Set(savedCollapsedCards), quickPhrases: savedQuickPhrases, quickPhraseEditorOpen: false, canvasStyle: savedCanvasStyle,
-  railOpen: new Set(savedRailOpen), railCache: new Map(), railLoading: new Set(),
+  railOpen: new Set(savedRailOpen), railCache: new Map(), railLoading: new Set(), railEdit: null, railMenu: null, railChooser: false,
   dragging: false, canvasGesture: false, canvasRefreshAfter: 0, canvasViewInitialized: false, canvasCamera: { x: 0, y: 0 }, mapCardSessionSwitches: new Set(),
   canvasCards: undefined, canvasCardsById: undefined, canvasGraph: undefined, mountedCardIds: new Set(), canvasNeedsCenter: false, highlightCardIds: new Set(),
   inspectorCardId: null, inspectorOpening: false, inspectorInputs: new Map(), inspectorSending: false, inspectorWidth: savedInspectorWidth, composer: { requestedFor: null, requestId: null, failedFor: null, retryAfter: 0, sessionId: null, models: [], model: null, catalogError: null, permissions: [], permission: null, context: null, breakdown: null, canCompact: false }, attachments: [], attaching: false, composerMenu: null, composerConfirmPreset: null, compacting: false, compactNote: null, inspectorFollow: true, inspectorThreadId: null, inspectorFollowNewest: false, inspectorRendered: false, focusThreadId: null, focusCardId: null, focusRequestedAt: 0,
@@ -459,7 +459,10 @@ function selectCanvas(thread) {
   if (thread.dshSessionId !== null) post('chattree:activate-session', { sessionId: thread.dshSessionId })
 }
 
-function openNewSession() {
+// `workspaceId` and `cwd` are the workspace the reader picked for this canvas. They ride on the
+// draft rather than being read from whatever is selected, so a canvas made in one workspace does
+// not depend on what the board happened to be showing.
+function openNewSession(workspaceId, cwd) {
   if (state.draft !== null) return
   state.mode = 'canvas'
   state.activeId = null
@@ -467,7 +470,7 @@ function openNewSession() {
   state.inspectorCardId = null
   state.inspectorOpening = false
   state.quickPhraseEditorOpen = false
-  state.draft = { kind: 'new', text: '', sending: false }
+  state.draft = { kind: 'new', text: '', sending: false, ...workspaceId === undefined ? {} : { workspaceId }, ...cwd === undefined ? {} : { cwd } }
   state.error = ''
   resetCanvasCamera()
   render()
@@ -644,7 +647,7 @@ async function submitDraft() {
   render()
   try {
     if (draft.kind === 'new') {
-      const session = await dshRpc('chattree:create-session', { workspaceId: state.selectedDshWorkspaceId, cwd: state.currentDsh?.cwd })
+      const session = await dshRpc('chattree:create-session', { workspaceId: draft.workspaceId ?? state.selectedDshWorkspaceId, cwd: draft.cwd ?? state.currentDsh?.cwd })
       await dshRpc('chattree:send-message', { sessionId: session.id, text })
       state.draft = null
       state.canvasViewInitialized = false
@@ -1642,23 +1645,114 @@ function ensureShell() {
   return shell
 }
 
-// The rail, as two levels: workspace, and the canvases inside it. A row folds; a canvas row
-// opens that canvas. Both names are DSH's own, so neither level keeps a copy that could drift
-// from what DSH shows.
-function sidebarHtml(rail) {
-  const groups = rail.map(group => {
-    const name = escapeHtml(group.workspace.title)
-    const where = escapeHtml(group.workspace.path ?? group.workspace.title)
-    const caret = `<span class="rail-caret${group.expanded ? ' is-open' : ''}" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m6.2 3.8 4 4.2-4 4.2"/></svg></span>`
-    const workspaceRow = `<button class="workspace-row${group.active ? ' active' : ''}" type="button" data-action="toggle-rail-group" data-workspace="${escapeHtml(group.workspace.id)}" aria-expanded="${group.expanded}" title="${where}">${caret}<span class="rail-workspace-name">${name}</span></button>`
-    if (!group.expanded) return `<section class="rail-group">${workspaceRow}</section>`
-    const rows = group.canvases.map(thread => `<button class="tree-row ${thread.id === state.activeId ? 'active' : ''}" data-action="select-thread" data-thread="${escapeHtml(thread.id)}" data-workspace="${escapeHtml(group.workspace.id)}" style="--thread-color:#374151"><span class="tree-dot"></span><span class="tree-name">${escapeHtml(threadListTitle(thread))}</span>${thread.parentId === null ? '' : '<i>分支</i>'}</button>`).join('')
-    const empty = group.canvases.length > 0 ? rows : `<p class="tree-empty">${group.loading ? '正在载入…' : '还没有画布'}</p>`
-    return `<section class="rail-group">${workspaceRow}<nav class="thread-tree">${empty}</nav></section>`
-  }).join('')
-  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button>${groups || '<p class="tree-empty">暂未同步工作区</p>'}`
+// The rail, as two levels: workspace, and the canvases inside it. A workspace row folds; a canvas
+// row opens that canvas. Both names are DSH's own -- renaming one here renames it there, and what
+// comes back is what gets rendered -- so neither level keeps a copy that could drift.
+//
+// A row's "more" is a sibling of the row rather than a child: the row is a button and a button
+// cannot hold one. It rides over the row's own right edge.
+function railMoreButton({ kind, id, session, title, label }) {
+  const where = session === undefined || session === null ? '' : ` data-session="${escapeHtml(session)}"`
+  return `<button class="rail-more" type="button" data-action="rail-menu" data-kind="${kind}" data-id="${escapeHtml(id)}"${where} data-title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" aria-haspopup="menu"><svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3.6" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="12.4" r="1.4"/></svg></button>`
 }
 
+// The rename box is rendered empty and filled after the patch, the same way the panel's composer
+// is: a value in the markup would make every keystroke change the rail's string, and the patch
+// would then replace the box the reader is typing in.
+function railRenameInput(kind, id, session) {
+  const where = session === undefined || session === null ? '' : ` data-rename-session="${escapeHtml(session)}"`
+  return `<input class="rail-rename" type="text" maxlength="120" data-rename-kind="${kind}" data-rename-id="${escapeHtml(id)}"${where} aria-label="重命名" placeholder="名称">`
+}
+
+function railMenuHtml(menu) {
+  const where = menu.session === undefined || menu.session === null ? '' : ` data-session="${escapeHtml(menu.session)}"`
+  return `<div class="rail-menu" role="menu"><button type="button" class="rail-menu-row" role="menuitem" data-action="rail-rename" data-kind="${menu.kind}" data-id="${escapeHtml(menu.id)}"${where} data-title="${escapeHtml(menu.title)}">重命名</button></div>`
+}
+
+// Which workspace a new canvas goes in. The button that starts a canvas has no directory of its
+// own -- a canvas is a DSH session, and every session needs one -- so the workspace is asked for
+// rather than inferred from whatever happened to be selected last.
+function railChooserHtml(rail) {
+  const rows = rail.map(group => `<button type="button" class="rail-menu-row" role="menuitem" data-action="choose-canvas-workspace" data-workspace="${escapeHtml(group.workspace.id)}" title="${escapeHtml(group.workspace.path ?? group.workspace.title)}">${escapeHtml(group.workspace.title)}</button>`).join('')
+  return `<div class="rail-menu rail-chooser" role="menu"><p class="rail-menu-title">在哪个工作区新建画布</p>${rows || '<p class="rail-menu-title">暂未同步工作区</p>'}</div>`
+}
+
+function sidebarHtml(rail) {
+  const edit = state.railEdit
+  const editing = (kind, id) => edit !== null && edit.kind === kind && edit.id === id
+  const menuFor = (kind, id) => state.railMenu !== null && state.railMenu.kind === kind && state.railMenu.id === id ? railMenuHtml(state.railMenu) : ''
+  const groups = rail.map(group => {
+    const workspace = group.workspace
+    const caret = `<span class="rail-caret${group.expanded ? ' is-open' : ''}" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m6.2 3.8 4 4.2-4 4.2"/></svg></span>`
+    const workspaceRow = editing('workspace', workspace.id)
+      ? `<div class="workspace-row is-editing">${caret}${railRenameInput('workspace', workspace.id, undefined)}</div>`
+      : `<button class="workspace-row${group.active ? ' active' : ''}" type="button" data-action="toggle-rail-group" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="${group.expanded}" title="${escapeHtml(workspace.path ?? workspace.title)}">${caret}<span class="rail-workspace-name">${escapeHtml(workspace.title)}</span></button>${railMoreButton({ kind: 'workspace', id: workspace.id, title: workspace.title, label: `重命名工作区：${workspace.title}` })}${menuFor('workspace', workspace.id)}`
+    if (!group.expanded) return `<section class="rail-group">${workspaceRow}</section>`
+    const rows = group.canvases.map(thread => {
+      const title = threadListTitle(thread)
+      if (editing('canvas', thread.id)) return `<div class="tree-item is-editing">${railRenameInput('canvas', thread.id, thread.dshSessionId)}</div>`
+      const more = thread.dshSessionId === null || thread.dshSessionId === undefined
+        ? ''
+        : railMoreButton({ kind: 'canvas', id: thread.id, session: thread.dshSessionId, title, label: `重命名画布：${title}` })
+      return `<div class="tree-item${thread.id === state.activeId ? ' active' : ''}"><button class="tree-row" type="button" data-action="select-thread" data-thread="${escapeHtml(thread.id)}" data-workspace="${escapeHtml(workspace.id)}" title="${escapeHtml(title)}"><span class="tree-dot"></span><span class="tree-name">${escapeHtml(title)}</span>${thread.parentId === null ? '' : '<i>分支</i>'}</button>${more}${menuFor('canvas', thread.id)}</div>`
+    }).join('')
+    const body = group.canvases.length > 0 ? rows : `<p class="tree-empty">${group.loading ? '正在载入…' : '还没有画布'}</p>`
+    return `<section class="rail-group">${workspaceRow}<nav class="thread-tree">${body}</nav></section>`
+  }).join('')
+  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button><div class="rail-head"><span>工作区</span><button class="rail-add" type="button" data-action="add-workspace" aria-label="添加工作区" title="添加工作区"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></svg></button></div>${groups || '<p class="tree-empty">暂未同步工作区</p>'}${state.railChooser ? railChooserHtml(rail) : ''}`
+}
+
+// The rail is patched like every other region, with one exception: a rename box that is already on
+// screen is left alone. Rewriting the region would replace the box and take the caret with it, and
+// the point of the box is that the reader is typing in it.
+function syncSidebar(shellElement, rail) {
+  const sidebar = shellElement.querySelector('.sidebar')
+  if (!(sidebar instanceof Element)) return
+  if (state.railEdit !== null && sidebar.querySelector('.rail-rename') !== null) return
+  patchSlot(sidebar, sidebarHtml(rail))
+  if (state.railEdit === null) return
+  const input = sidebar.querySelector('.rail-rename')
+  if (!(input instanceof HTMLInputElement)) return
+  input.value = state.railEdit.title
+  input.focus()
+  input.select()
+}
+
+// Commit what is in the box. Blank or unchanged is dropped rather than sent: DSH refuses a blank
+// title, and there is nothing to say when the name did not move.
+function commitRailRename() {
+  const edit = state.railEdit
+  if (edit === null) return
+  const input = app.querySelector('.rail-rename')
+  const title = input instanceof HTMLInputElement ? input.value.trim() : ''
+  state.railEdit = null
+  if (title === '' || title === edit.title) return render()
+  render()
+  post(edit.kind === 'workspace' ? 'chattree:rename-workspace' : 'chattree:rename-canvas', {
+    requestId: `rename-${Date.now()}`,
+    ...edit.kind === 'workspace' ? { workspaceId: edit.id } : { sessionId: edit.session },
+    title
+  })
+}
+
+// A renamed conversation reaches this side through the host's copy of the session, so that group
+// is read again rather than guessed at. A renamed workspace does not need this: the bridge pushes
+// DSH's own list, and the rail renders that.
+async function reloadRailGroup(workspaceId) {
+  const workspace = workspaceChoices().find(item => item.id === workspaceId)
+  if (workspace === undefined) return
+  try {
+    state.railCache.delete(workspaceId)
+    state.railLoading.add(workspaceId)
+    state.railCache.set(workspaceId, await threadsForDshWorkspace(workspace, { recordArchive: false }))
+    if (state.workspace !== null && state.workspace.id === `dsh:${workspaceId}`) await openDshWorkspace(workspaceId, { preserveCanvasCamera: true })
+  } catch (error) {
+    setError(error)
+  } finally {
+    state.railLoading.delete(workspaceId)
+  }
+  if (canReplaceView()) render()
+}
 function topbarHtml(canvasControls) {
   return `<div class="view-switch" role="group" aria-label="视图切换"><button data-action="close" type="button" aria-pressed="false">对话</button><button class="active" type="button" aria-pressed="true">Chat Tree</button></div>${canvasControls}`
 }
@@ -2515,6 +2609,18 @@ function syncComposerMenu(panel, html) {
   element.style.bottom = `${Math.round(height) + 10}px`
 }
 
+// The rail's own popovers close the same way. A click on the button that opened one is excluded,
+// so the button's own handler can toggle it.
+document.addEventListener('pointerdown', event => {
+  if (state.railMenu === null && state.railChooser !== true) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target.closest('.rail-menu, [data-action="rail-menu"], [data-action="create-session"], [data-action="add-workspace"]') !== null) return
+  state.railMenu = null
+  state.railChooser = false
+  render()
+}, true)
+
 // Anywhere else, and the menu is gone: a menu is a question about one turn, and the reader has
 // moved on. Capture phase, so a click on the canvas behind the panel closes it even though the
 // canvas handles its own clicks.
@@ -2622,7 +2728,7 @@ function render() {
   const canvasControls = state.mode === 'canvas' && (threads.length > 0 || state.draft?.kind === 'new') ? `<div class="canvas-controls"><button data-action="layout" aria-label="整理" data-label="整理"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></button><button data-action="focus-active" aria-label="定位" data-label="定位"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v2.6M8 11.9v2.6M1.5 8h2.6M11.9 8h2.6"/></svg></button><button data-action="zoom-in" aria-label="放大" data-label="放大"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg></button><span>${Math.round(state.zoom * 100)}%</span><button data-action="zoom-out" aria-label="缩小" data-label="缩小"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.5 8h9"/></svg></button><button data-action="toggle-canvas-style" aria-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" data-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" aria-pressed="${state.canvasStyle === 'dot' ? 'true' : 'false'}"><svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="1.6"/><circle cx="12" cy="4" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/></svg></button></div>` : ''
   const shellElement = ensureShell()
   shellElement.classList.toggle('sidebar-collapsed', state.sidebarCollapsed === true)
-  patchSlot(shellElement.querySelector('.sidebar'), sidebarHtml(rail))
+  syncSidebar(shellElement, rail)
   patchSlot(shellElement.querySelector('.topbar'), topbarHtml(canvasControls))
   const stage = shellElement.querySelector('.main-stage')
   if (stage instanceof HTMLElement) {
@@ -3189,13 +3295,59 @@ app.addEventListener('click', async event => {
     if (button.dataset.action === 'toggle-rail-group') {
       const id = button.dataset.workspace
       if (id === undefined) return
+      state.railMenu = null
+      state.railChooser = false
       if (state.railOpen.has(id)) state.railOpen.delete(id)
       else state.railOpen.add(id)
       persistRailOpen()
       render()
       return
     }
-    if (button.dataset.action === 'create-session') openNewSession()
+    // One row's "more", toggled: the same row again closes it, another row moves it.
+    if (button.dataset.action === 'rail-menu') {
+      const kind = button.dataset.kind
+      const id = button.dataset.id
+      if (kind === undefined || id === undefined) return
+      const open = state.railMenu !== null && state.railMenu.kind === kind && state.railMenu.id === id
+      state.railMenu = open ? null : { kind, id, session: button.dataset.session, title: button.dataset.title ?? '' }
+      state.railChooser = false
+      render()
+      return
+    }
+    if (button.dataset.action === 'rail-rename') {
+      const kind = button.dataset.kind
+      const id = button.dataset.id
+      if (kind === undefined || id === undefined) return
+      state.railMenu = null
+      state.railChooser = false
+      state.railEdit = { kind, id, session: button.dataset.session, title: button.dataset.title ?? '' }
+      render()
+      return
+    }
+    if (button.dataset.action === 'add-workspace') {
+      state.railMenu = null
+      state.railChooser = false
+      render()
+      // The host's own chooser is modal, and its answer is a path it registers itself.
+      post('chattree:add-workspace', { requestId: `add-workspace-${Date.now()}` })
+      return
+    }
+    if (button.dataset.action === 'choose-canvas-workspace') {
+      const id = button.dataset.workspace
+      if (id === undefined) return
+      state.railChooser = false
+      const choice = workspaceChoices().find(item => item.id === id)
+      // The catch-all has no directory of its own, so it falls back to the current session's.
+      if (id === UNGROUPED_WORKSPACE_ID) openNewSession()
+      else openNewSession(id, choice?.path)
+      return
+    }
+    if (button.dataset.action === 'create-session') {
+      state.railMenu = null
+      state.railChooser = state.railChooser !== true
+      render()
+      return
+    }
     if (button.dataset.action === 'open-current' && state.currentDsh !== null) post('chattree:open-session', { sessionId: state.currentDsh.id })
     if (button.dataset.action === 'select-thread' && button.dataset.workspace !== undefined && button.dataset.workspace !== state.selectedDshWorkspaceId) {
       // A canvas in another workspace: the canvas view shows one workspace at a time, so the
@@ -3382,6 +3534,30 @@ app.addEventListener('change', event => {
     post('chattree:attach', { requestId: `attach-${Date.now()}`, sessionId, files })
   }
 })
+// The rail's rename box: Enter commits, Escape drops it, and leaving it commits too -- a row is a
+// name, not a document, so there is nothing to come back to.
+app.addEventListener('keydown', event => {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains('rail-rename')) return
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopPropagation()
+    commitRailRename()
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopPropagation()
+    state.railEdit = null
+    render()
+  }
+})
+app.addEventListener('focusout', event => {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement) || !input.classList.contains('rail-rename')) return
+  commitRailRename()
+})
+
 // Enter sends from the panel's box; Shift+Enter keeps the newline. While an input method is
 // composing the candidate window owns Enter, so a Chinese word is never sent the moment it is
 // confirmed.
@@ -3463,6 +3639,30 @@ window.addEventListener('message', event => {
       breakdown: data.breakdown ?? null,
       canCompact: data.canCompact === true
     }
+    render()
+  }
+  if (data.type === 'chattree:renamed') {
+    // DSH took the name. A workspace needs nothing further -- the bridge pushed DSH's own list --
+    // while a conversation's title reaches this side through the host's copy of the session, so
+    // that group is read again.
+    state.railEdit = null
+    if (data.scope === 'canvas' && state.selectedDshWorkspaceId !== null) void reloadRailGroup(state.selectedDshWorkspaceId)
+    else render()
+  }
+  if (data.type === 'chattree:rename-failed') {
+    // DSH refuses a blank or already-taken name; the box stays open with the old name.
+    state.railEdit = null
+    setError(new Error(typeof data.message === 'string' ? data.message : '重命名失败'))
+    render()
+  }
+  if (data.type === 'chattree:workspace-added') {
+    // `created` is false when the directory was already a workspace: the row is already there, so
+    // there is nothing to add and nothing to say about it.
+    if (data.cancelled !== true && data.created === false) setError(new Error('这个目录已经在工作区里了'))
+    render()
+  }
+  if (data.type === 'chattree:workspace-add-failed') {
+    setError(new Error(typeof data.message === 'string' ? data.message : '添加工作区失败'))
     render()
   }
   if (data.type === 'chattree:compacted') {

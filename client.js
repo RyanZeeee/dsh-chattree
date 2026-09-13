@@ -217,6 +217,20 @@ window.__ModuleLoader__.load({
         } catch { /* the typed namespace is not registered in this build */ }
         return undefined
       }
+      // The rail's two levels are DSH's: a workspace registration, and the sessions inside it.
+      // Renaming either one goes through DSH rather than through a copy kept here -- DSH owns both
+      // titles, it keeps reporting them, and the reader sees the same names in DSH's own sidebar.
+      const remoteNamespace = name => {
+        try {
+          const mounted = typeof ctx.get === 'function' ? ctx.get(`remote.${name}`) : undefined
+          if (mounted !== undefined && mounted !== null) return mounted
+        } catch { /* the typed namespace is not registered in this build */ }
+        try {
+          const direct = ctx.remote?.[name]
+          if (direct !== undefined && direct !== null) return direct
+        } catch { /* the typed namespace is not registered in this build */ }
+        return undefined
+      }
       // A build that cannot answer leaves the catalog empty. That is a missing capability,
       // not a failed read, so it is reported back to the canvas as data and never thrown:
       // the model pickers simply stay out of the composer, which is what the panel expects
@@ -514,6 +528,54 @@ window.__ModuleLoader__.load({
             if (result.kind === 'error') throw new Error(typeof result.text === 'string' ? result.text : '压缩失败')
             send('chattree:compacted', { requestId, sessionId, text: typeof result.text === 'string' ? result.text : '' })
           }).catch(error => send('chattree:compact-failed', { requestId, sessionId, message: error instanceof Error ? error.message : '压缩失败' }))
+          return
+        }
+        // A workspace name and a conversation name are both DSH's, so a rename is asked for and
+        // never written down here. DSH validates it -- a blank or already-taken title comes back
+        // as an error -- and the reply is what the reader is shown.
+        if (event.data.type === 'chattree:rename-workspace') {
+          const { requestId, workspaceId, title } = event.data
+          Promise.resolve().then(async () => {
+            const workspace = remoteNamespace('workspace')
+            if (workspace === undefined || typeof workspace.rename !== 'function') throw new Error('DSH 未提供工作区接口')
+            const response = await workspace.rename({ workspaceId, title })
+            if (response?.ok === false) throw new Error(response.error?.message ?? 'DSH 未能重命名工作区')
+            // DSH owns the list, so the reader's copy is taken from it again rather than patched.
+            send('chattree:workspaces', { workspaces: workspaceSnapshot(ctx) })
+            send('chattree:renamed', { requestId, scope: 'workspace', id: workspaceId, title })
+          }).catch(error => send('chattree:rename-failed', { requestId, scope: 'workspace', id: workspaceId, message: error instanceof Error ? error.message : '重命名失败' }))
+          return
+        }
+        if (event.data.type === 'chattree:rename-canvas') {
+          const { requestId, sessionId, title } = event.data
+          Promise.resolve().then(async () => {
+            const session = remoteSession()
+            if (session === undefined || typeof session.rename !== 'function') throw new Error('DSH 未提供会话接口')
+            const response = await session.rename({ sessionId, title })
+            if (response?.ok === false) throw new Error(response.error?.message ?? 'DSH 未能重命名画布')
+            send('chattree:renamed', { requestId, scope: 'canvas', id: sessionId, title })
+          }).catch(error => send('chattree:rename-failed', { requestId, scope: 'canvas', id: sessionId, message: error instanceof Error ? error.message : '重命名失败' }))
+          return
+        }
+        // Adding a workspace is the host's own directory chooser plus its registration. `create` is
+        // idempotent, so choosing a directory that is already a workspace resolves to that one
+        // instead of making a second row for the same place.
+        if (event.data.type === 'chattree:add-workspace') {
+          const { requestId } = event.data
+          Promise.resolve().then(async () => {
+            const picker = remoteNamespace('directoryPicker')
+            const workspace = remoteNamespace('workspace')
+            if (picker === undefined || typeof picker.pick !== 'function') throw new Error('DSH 未提供目录选择器')
+            if (workspace === undefined || typeof workspace.create !== 'function') throw new Error('DSH 未提供工作区接口')
+            const path = await picker.pick()
+            // A cancelled chooser is not a failure: the reader changed their mind.
+            if (path === null || path === undefined) return send('chattree:workspace-added', { requestId, cancelled: true })
+            const response = await workspace.create({ path })
+            if (response?.ok === false) throw new Error(response.error?.message ?? 'DSH 未能添加工作区')
+            const value = response?.value ?? {}
+            send('chattree:workspaces', { workspaces: workspaceSnapshot(ctx) })
+            send('chattree:workspace-added', { requestId, cancelled: false, created: value.created === true, workspaceId: value.workspace?.workspaceId ?? null })
+          }).catch(error => send('chattree:workspace-add-failed', { requestId, message: error instanceof Error ? error.message : '添加工作区失败' }))
           return
         }
         if (event.data.type === 'chattree:attach') {

@@ -83,7 +83,10 @@ test('the shell is built once and its regions are patched', () => {
   // lives under the shell, so the shell itself is only ever created once.
   has(app, 'function ensureShell()', 'the shell has a single build path')
   has(app, 'if (shell !== null && shell.isConnected) return shell', 'it is reused while it is live')
-  has(app, "patchSlot(shellElement.querySelector('.sidebar')", 'the sidebar is patched')
+  // The sidebar goes through syncSidebar() so a live rename box can hold the region still; the
+  // patch is still the only thing that writes it.
+  has(app, 'function syncSidebar(shellElement, rail) {', 'the sidebar has a sync path')
+  has(app, "patchSlot(sidebar, sidebarHtml(rail))", 'and it is still patched, not rebuilt')
   has(app, 'syncCanvasCards(prepared.cards, prepared.graph)', 'cards are reconciled rather than rebuilt')
   has(app, 'writtenHtml.get(existing) === html', 'an unchanged card is left alone')
   // Comparing against a live outerHTML cannot work: the browser re-serializes SVG, so a card
@@ -357,4 +360,43 @@ test('the rail is two levels: workspaces, and the canvases inside them', () => {
   assert.ok(!app.includes('select-workspace'), 'the workspace <select> is still wired')
   assert.ok(!app.includes('sidebar-heading'), 'the flat canvas heading is still rendered')
   assert.ok(!css.includes('workspace-select'), 'the dropdown styles are still here')
+})
+
+test('renaming either rail level goes through DSH', () => {
+  // DSH owns both titles and keeps reporting them, so a name kept here would be overwritten by
+  // the next thing DSH says -- and the reader would see one thing called two names.
+  has(client, "if (event.data.type === 'chattree:rename-workspace')", 'the workspace rename is bridged')
+  has(client, 'await workspace.rename({ workspaceId, title })', 'and asks DSH to rename it')
+  has(client, "if (event.data.type === 'chattree:rename-canvas')", 'the canvas rename is bridged')
+  has(client, 'await session.rename({ sessionId, title })', 'and asks DSH to rename the root session')
+  has(client, "send('chattree:workspaces', { workspaces: workspaceSnapshot(ctx) })", 'the workspace list is taken from DSH again rather than patched')
+  has(app, 'const title = threadListTitle(thread)', 'a canvas row is named by what DSH says, not by anything stored here')
+})
+
+test('the rename box is written after the patch, and holds the rail still', () => {
+  // The box lives in a region that is patched as one string: a value in the markup would make
+  // every keystroke change that string, and a patch while the reader is typing would replace the
+  // box and take the caret with it. Both halves are the same rule the composer follows.
+  const input = app.slice(app.indexOf('function railRenameInput('))
+  assert.ok(!/value=/.test(input.slice(0, input.indexOf('\n}'))), 'the rename box renders its own value')
+  has(app, 'input.value = state.railEdit.title', 'the value is written in after the patch')
+  has(app, "if (state.railEdit !== null && sidebar.querySelector('.rail-rename') !== null) return", 'the region is left alone while a box is open')
+  has(app, "if (!(input instanceof HTMLInputElement)) return\n  input.value = state.railEdit.title\n  input.focus()", 'and the box is focused once it is there')
+  has(app, 'event.key === \'Escape\'', 'Escape drops the rename')
+  has(app, 'commitRailRename()', 'leaving the box commits it')
+})
+
+test('the rail can add a workspace, and a new canvas asks which one', () => {
+  // A canvas is a DSH session and every session needs a directory, so which workspace it goes in
+  // is asked for rather than inferred from whatever was selected last.
+  has(client, "if (event.data.type === 'chattree:add-workspace')", 'adding a workspace is bridged')
+  has(client, 'picker.pick()', 'through the host directory chooser')
+  has(client, 'await workspace.create({ path })', 'and the host registration')
+  has(client, "cancelled: true", 'a cancelled chooser is not a failure')
+  has(app, 'data-action="add-workspace"', 'the rail offers it')
+  has(app, 'function railChooserHtml(rail)', 'the new-canvas chooser exists')
+  has(app, 'data-action="choose-canvas-workspace"', 'each workspace is a choice')
+  has(app, 'openNewSession(id, choice?.path)', 'the chosen workspace carries its directory')
+  has(app, 'draft.workspaceId ?? state.selectedDshWorkspaceId', 'the draft decides where the canvas goes')
+  has(app, 'draft.cwd ?? state.currentDsh?.cwd', 'and which directory it uses')
 })

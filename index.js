@@ -21,9 +21,10 @@ const SAVE_DEBOUNCE_MS = 800
 
 /** JSON persistence for the Chat Tree workspace graph. */
 export class WorkspaceStore {
-  constructor(dataFile) {
+  constructor(dataFile, ctx) {
     if (typeof dataFile !== 'string' || dataFile.length === 0) throw new Error('chattree: config.dataFile must be a non-empty path')
     this.dataFile = dataFile
+    this.ctx = ctx
     this.state = undefined
     this.serial = Promise.resolve()
     this.ready = this.load()
@@ -216,13 +217,49 @@ export class WorkspaceStore {
     })
   }
 
+  /**
+   * Every committed event of one session, oldest first, with its payload.
+   *
+   * The live session object this plugin is handed carries no event list in this build -- there is
+   * no `session.events` -- so the history is read from the session query service instead. That
+   * absence was the whole of the old failure: the replay loop threw
+   * `TypeError: session.events is not iterable`, every replay path was swallowed as a warning,
+   * and a mount therefore never re-seeded an existing canvas from its session log.
+   *
+   * `listEvents` would be cheaper but it returns metadata only (no `data`), and the payload is
+   * exactly what is being projected; `readSession` hands back the raw log. The full log is read
+   * rather than the current surface, because the canvas draws every turn a session ever had --
+   * including the ones a compaction has since replaced.
+   *
+   * @param session - live session whose log is wanted.
+   * @returns the event log, or an empty one when it cannot be read.
+   */
+  async sessionLog(session) {
+    // A build that does hand the log out on the session object needs no query at all.
+    if (session?.events !== undefined && session?.events !== null) {
+      try { return [...session.events] } catch { /* present but not iterable in this build */ }
+    }
+    const query = this.ctx?.get?.('sessionQuery') ?? this.ctx?.sessionQuery
+    if (query === undefined || typeof query.readSession !== 'function') return []
+    try {
+      const read = await query.readSession(session.id)
+      return Array.isArray(read?.events) ? read.events : []
+    } catch (error) {
+      // One unreadable log is reported and then treated as empty: the live event path still
+      // projects everything that happens from here on, so the canvas is not left blank forever.
+      this.ctx?.logger?.warn?.(error instanceof Error ? error : new Error(String(error)))
+      return []
+    }
+  }
+
   /** Replay one live DSH session into the dedicated projection workspace. */
   async projectSession(session, replayFrom = 0, workspaceTitle = 'DSH 任务') {
+    const events = await this.sessionLog(session)
     return this.mutate(() => {
       if (this.state.hiddenSessionIds.includes(session.id)) return null
       const workspace = this.dshWorkspace(sessionCwd(session), workspaceTitle)
       const thread = this.dshThread(workspace, session)
-      for (const event of session.events) {
+      for (const event of events) {
         if (event.seq >= replayFrom) this.projectEventInto(workspace, thread, event)
       }
       return structuredClone(thread)
@@ -859,7 +896,7 @@ function page() {
 
 /** Mount Chat Tree routes on the existing DSH Web Server. */
 export function apply(ctx, config) {
-  const store = new WorkspaceStore(config?.dataFile)
+  const store = new WorkspaceStore(config?.dataFile, ctx)
   const autoProjection = config?.autoProjection !== false
   const projectionWorkspaceTitle = typeof config?.projectionWorkspaceTitle === 'string' && config.projectionWorkspaceTitle.trim() !== ''
     ? config.projectionWorkspaceTitle.trim().slice(0, MAX_TITLE_LENGTH)
