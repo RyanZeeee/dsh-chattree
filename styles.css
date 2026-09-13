@@ -398,6 +398,11 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
   --ct-accent: #3478f6;
   --ct-accent-ink: #2563eb;
   --ct-accent-soft: #eef4ff;
+  /* The one colour nothing else on the canvas uses: a compaction node. */
+  --ct-compaction: #d99a00;
+  --ct-compaction-ink: #8a6200;
+  --ct-compaction-soft: #fff6e0;
+  --ct-compaction-border: #e8c069;
   --ct-radius-card: 12px;
   --ct-radius-bubble: 12px;
   --ct-radius-tool: 8px;
@@ -422,6 +427,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
   --ct-accent: #5b8def;
   --ct-accent-ink: #7ea6f5;
   --ct-accent-soft: #1d2733;
+  --ct-compaction: #e8b53f;
+  --ct-compaction-ink: #f0cb74;
+  --ct-compaction-soft: #2e2610;
+  --ct-compaction-border: #6b5a24;
   --ct-shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 12px 26px -18px rgba(0,0,0,.75);
   --ct-shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 20px 36px -20px rgba(0,0,0,.8);
   --ct-shadow-panel: -20px 0 44px -30px rgba(0,0,0,.75);
@@ -484,6 +493,21 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .thread-card.has-error { border-color: #ef9a9a; }
 .thread-card.has-error .thread-card-head { border-bottom-color: #f6d5d5; }
 .thread-card.has-error .topic-dot { background: #e5484d; }
+/* A compaction node: the card's edge, its header and its dot turn amber, so where the history
+   was replaced by a summary is legible from across the canvas -- which is the whole reason the
+   node is drawn at all. The tint stops at the head; the summary underneath stays readable. */
+.thread-card.is-compaction { border-color: var(--ct-compaction-border); }
+.thread-card.is-compaction .thread-card-head { background: var(--ct-compaction-soft); border-bottom-color: var(--ct-compaction-border); }
+.thread-card.is-compaction .topic-dot { background: var(--ct-compaction); }
+.thread-card.is-compaction .thread-title { color: var(--ct-compaction-ink); }
+.card-compaction { margin: 0; border-left: 3px solid var(--ct-compaction); padding-left: 10px; }
+.card-compaction p { margin: 0; }
+/* The panel's copy of the same marker, and the line that stands in for the composer: there is
+   nothing under a checkpoint to branch from, so it says that instead of offering a dead box. */
+.chat-bubble-compaction { border-left: 3px solid var(--ct-compaction); background: var(--ct-compaction-soft); border-radius: var(--ct-radius-bubble); padding: 10px 12px; }
+.chat-bubble-compaction strong { display: block; margin-bottom: 4px; color: var(--ct-compaction-ink); font-size: 11px; font-weight: 650; letter-spacing: .02em; }
+.chat-bubble-compaction p { margin: 0; }
+.composer-note { margin: 0; padding: 12px var(--ct-panel-pad); color: var(--ct-text-3); font-size: 12px; line-height: 1.7; }
 .card-failure {
   display: flex; gap: 9px; margin: 12px 0 0; padding: 11px 12px;
   border: 1px solid #f6d5d5; border-radius: 10px; background: #fef2f2;
@@ -573,6 +597,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .dot-node.selected { background: var(--ct-accent); box-shadow: 0 0 0 13px var(--ct-accent-soft), 0 0 0 15px var(--ct-accent); }
 .dot-node.has-error { background: #e5484d; }
 .dot-node.is-pending { animation: syn-card-pulse 1.1s ease-in-out infinite; }
+/* A compaction node is the one yellow thing on the canvas, in both shapes: it marks where the
+   history behind it was replaced by a summary, which is a different kind of fact from a turn. */
+.dot-node.is-compaction { background: var(--ct-compaction); }
+.dot-node.is-compaction.selected { background: var(--ct-compaction); box-shadow: 0 0 0 13px var(--ct-compaction-soft), 0 0 0 15px var(--ct-compaction); }
 /* The tooltip lives outside .canvas-content, so it keeps its own size at every zoom:
    nothing here scales with the canvas. */
 .dot-tooltip {

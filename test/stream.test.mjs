@@ -28,8 +28,17 @@ const persistedStart = source.indexOf('function persistedMessagesFor(thread) {')
 assert.notEqual(persistedStart, -1, 'missing persistedMessagesFor')
 const persistedMessagesFor = source.slice(persistedStart, source.indexOf('\n', persistedStart))
 
+// The block that decides what a stored message is: the runtime snapshot to drop, the compaction
+// checkpoint to re-label, and the reader that applies both.
+const classifyStart = source.indexOf('const RUNTIME_SNAPSHOT_OPENING')
+assert.notEqual(classifyStart, -1, 'missing the message classifiers')
+const threadMessagesAt = source.indexOf('function threadMessages(thread) {')
+assert.notEqual(threadMessagesAt, -1, 'missing threadMessages')
+const classifyMessages = source.slice(classifyStart, source.indexOf('\n}\n', threadMessagesAt) + 3)
+
 const buildMessagesFor = new Function('state', [
   persistedMessagesFor,
+  classifyMessages,
   grab('function pendingUserIndex(messages, pending) {', '\n}\n'),
   grab('function settlePendingReply(thread, messages) {', '\n}\n'),
   grab('function messagesFor(thread) {', '\n}\n'),
@@ -93,4 +102,51 @@ test('the saved turn wins once it lands, and the stream record goes with it', ()
   assert.equal(answer(messages).pending, undefined)
   assert.equal(state.pendingReplies.has('s1'), false, 'the pending marker was not settled')
   assert.equal(state.liveReplies.has('s1'), false, 'the stream record outlived the saved turn')
+})
+
+// The bug this locks: DSH lands a compaction checkpoint as an ordinary `user/message`, so the
+// canvas drew it as a question nothing would ever answer -- a node reading "等待助手回复" whose
+// composer was dead, because there was no answer under it to branch from.
+const CHECKPOINT = [
+  'This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context.',
+  'Treat the captured context as established background and build on it without restating it.',
+  'Continue the task directly from the messages that follow, without acknowledging this checkpoint.',
+  '',
+  '<compacted-summary>',
+  '用户要求把输入区的按钮改成白底。',
+  '</compacted-summary>',
+].join('\n')
+
+test('a compaction checkpoint is not a question, and it keeps its own summary', () => {
+  const saved = [
+    ask('第一问'),
+    savedAnswer('第一答'),
+    { kind: 'user', text: CHECKPOINT, at: new Date().toISOString(), sourceSeq: 3 },
+    ask('压缩之后的问题'),
+    savedAnswer('压缩之后的回答'),
+  ]
+  const messages = buildMessagesFor(stateFor({ saved }))(thread)
+  // Four entries: the question and its answer, then the checkpoint as its own kind, then the
+  // next question and its answer. The checkpoint is never dropped -- it is a node on the line.
+  assert.deepEqual(messages.map(message => message.kind), ['user', 'assistant', 'compaction', 'user', 'assistant'])
+  const checkpoint = messages[2]
+  assert.equal(checkpoint.text, '用户要求把输入区的按钮改成白底。', 'the preamble and the tags are not part of the summary')
+  assert.equal(checkpoint.sourceSeq, 3, 'it keeps the position it had, so every later turn id is unchanged')
+})
+
+test('a checkpoint written without the tags still reads as a checkpoint', () => {
+  const saved = [{ kind: 'user', text: CHECKPOINT.split('\n').slice(0, 3).join('\n'), at: new Date().toISOString(), sourceSeq: 1 }]
+  const messages = buildMessagesFor(stateFor({ saved }))(thread)
+  assert.equal(messages[0].kind, 'compaction')
+})
+
+test('the saved runtime snapshot is still dropped, and ordinary questions are untouched', () => {
+  const saved = [
+    { kind: 'user', text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.', at: new Date().toISOString(), sourceSeq: 1 },
+    ask('真正的问题'),
+    savedAnswer('真正的回答'),
+  ]
+  const messages = buildMessagesFor(stateFor({ saved }))(thread)
+  assert.deepEqual(messages.map(message => message.kind), ['user', 'assistant'])
+  assert.equal(messages[0].text, '真正的问题')
 })

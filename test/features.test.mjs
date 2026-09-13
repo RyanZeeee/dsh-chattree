@@ -314,3 +314,29 @@ test('the ring states its own box, so its mark is not squeezed out', () => {
   has(app, 'const COMPOSER_RING_SIZE = 20', 'the ring is big enough to hold a mark')
   has(app, 'composer-ring-glyph', 'the mark is drawn')
 })
+
+test('a compaction checkpoint is a node of its own, never a question', () => {
+  // DSH lands the checkpoint as an ordinary `user/message`. Nothing recognised it, so the canvas
+  // drew it as a question nothing would ever answer: a node reading "等待助手回复" whose composer
+  // was dead, because there was no answer under it to branch from.
+  has(host, "if (isCheckpointText(text)) return noteProjection('compaction', checkpointSummary(text))", 'the host stores it as what it is')
+  has(host, "const CHECKPOINT_OPENING = 'This is an automatically generated checkpoint", 'recognised by its opening line')
+  has(host, "const CHECKPOINT_CLOSE_TAG = '</compacted-summary>'", 'the closing tag is its own literal, not the opening one')
+  has(app, 'function threadMessages(thread)', 'the canvas re-labels one stored before that rule existed')
+  has(app, "if (question.kind !== 'user' && question.kind !== 'compaction') continue", 'a checkpoint becomes its own turn')
+  has(app, "if (reply.kind === 'user' || reply.kind === 'compaction') break", 'and is never swallowed as a reply')
+  has(app, 'latestTurn.compaction !== true &&', 'a stream is never painted onto the marker')
+  has(app, "const heading = card.compaction === true ? '上下文已压缩' : card.question", 'the card is headed by the label, not by the summary twice')
+  has(app, 'if (card.compaction === true) {', 'the panel answers with a note instead of a dead input')
+  has(app, 'composer-note', 'and that note exists')
+})
+
+test('a compaction node is the one yellow thing on the canvas', () => {
+  has(css, '--ct-compaction: #d99a00;', 'a light-theme amber')
+  has(css, '--ct-compaction: #e8b53f;', 'and a dark-theme one')
+  has(css, '.thread-card.is-compaction {', 'the card is marked')
+  has(css, '.thread-card.is-compaction .thread-card-head {', 'its header is tinted')
+  has(css, '.thread-card.is-compaction .topic-dot { background: var(--ct-compaction); }', 'and so is its dot')
+  has(css, '.dot-node.is-compaction { background: var(--ct-compaction); }', 'the dot canvas marks it too')
+  has(css, '.composer-note {', 'the panel note is styled')
+})

@@ -613,6 +613,42 @@ async function submitDraft() {
 function threadsById() { return new Map((state.workspace?.threads ?? []).map(thread => [thread.id, thread])) }
 function persistedMessagesFor(thread) { return state.historyBySession.get(thread.dshSessionId) ?? thread.messages ?? [] }
 
+// Two kinds of user message in a DSH log are not something the reader asked. One is the runtime
+// snapshot, which is dropped outright. The other is a compaction checkpoint: DSH lands it as an
+// ordinary `user/message`, so it was being drawn as a question that nothing ever answers -- a
+// card reading "等待助手回复" whose composer is dead, because there is no answer to branch from.
+// It is a node of its own instead, and the marker the canvas paints it with says why it is there.
+//
+// Recognised by its opening line, in both places a message can enter: during persistence (so a
+// new checkpoint is stored as what it is) and here (so a workspace saved before that rule existed
+// renders correctly without a migration).
+const RUNTIME_SNAPSHOT_OPENING = 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.'
+const CHECKPOINT_OPENING = 'This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context.'
+const CHECKPOINT_OPEN_TAG = '<compacted-summary>'
+const CHECKPOINT_CLOSE_TAG = '</compacted-summary>'
+
+const messageOpening = message => typeof message?.text === 'string' ? message.text.trimStart() : ''
+const isRuntimeSnapshot = message => message?.kind === 'user' && messageOpening(message).startsWith(RUNTIME_SNAPSHOT_OPENING)
+const isCheckpoint = message => message?.kind === 'user' && messageOpening(message).startsWith(CHECKPOINT_OPENING)
+
+// The checkpoint carries an English preamble and the tags DSH fences the summary with. Neither
+// belongs on a card: the reader wants what was kept, not the framing around it.
+function checkpointSummary(text) {
+  const body = typeof text === 'string' ? text : ''
+  const start = body.indexOf(CHECKPOINT_OPEN_TAG)
+  const end = body.lastIndexOf(CHECKPOINT_CLOSE_TAG)
+  if (start === -1 || end <= start) return body.trim()
+  return body.slice(start + CHECKPOINT_OPEN_TAG.length, end).trim()
+}
+
+function threadMessages(thread) {
+  return persistedMessagesFor(thread).flatMap(message => {
+    if (isRuntimeSnapshot(message)) return []
+    if (isCheckpoint(message)) return [{ ...message, kind: 'compaction', text: checkpointSummary(message.text) }]
+    return [message]
+  })
+}
+
 function pendingUserIndex(messages, pending) {
   return messages.findLastIndex(message => message.kind === 'user' && message.text === pending.text && new Date(message.at).getTime() >= pending.at - 2_000)
 }
@@ -627,10 +663,7 @@ function settlePendingReply(thread, messages) {
 }
 
 function messagesFor(thread) {
-  // A runtime-context snapshot is internal DSH state, never a user turn.
-  // Filter here as well as during persistence so existing saved workspaces
-  // immediately render one question and its answer as one card.
-  const messages = persistedMessagesFor(thread).filter(message => !(message.kind === 'user' && typeof message.text === 'string' && message.text.trimStart().startsWith('Current runtime context. This snapshot supersedes earlier runtime-context snapshots.')))
+  const messages = threadMessages(thread)
   const pending = state.pendingReplies.get(thread.dshSessionId)
   if (pending === undefined) return messages
   if (settlePendingReply(thread, messages)) {
@@ -920,20 +953,24 @@ function conversationCards(threads) {
     const turns = []
     for (let messageIndex = 0; messageIndex < messages.length; messageIndex++) {
       const question = messages[messageIndex]
-      if (question.kind !== 'user') continue
+      if (question.kind !== 'user' && question.kind !== 'compaction') continue
+      // A checkpoint is a node of its own: nothing answers it, and it must not be swallowed as a
+      // reply to the question above it. It keeps the turn slot it already occupies, so every id
+      // after it stays the id it was.
+      const compaction = question.kind === 'compaction'
       const replies = []
       const errors = []
       let processCount = 0
-      for (let replyIndex = messageIndex + 1; replyIndex < messages.length; replyIndex++) {
+      if (!compaction) for (let replyIndex = messageIndex + 1; replyIndex < messages.length; replyIndex++) {
         const reply = messages[replyIndex]
-        if (reply.kind === 'user') break
+        if (reply.kind === 'user' || reply.kind === 'compaction') break
         if (reply.kind === 'assistant') replies.push(reply)
         if (reply.kind === 'error') errors.push(reply)
         if (Array.isArray(reply.process)) processCount += reply.process.length
         else if (reply.kind === 'tool') processCount += 1
       }
-      const answer = replies.at(-1) ?? null
-      const error = errors.at(-1) ?? null
+      const answer = compaction ? null : replies.at(-1) ?? null
+      const error = compaction ? null : errors.at(-1) ?? null
       const turnIndex = turns.length
       const previous = turns.at(-1)
       // One identity per turn, and it is the turn's position in its thread. It used to be
@@ -963,11 +1000,14 @@ function conversationCards(threads) {
         answer,
         error,
         processCount,
+        compaction,
       })
     }
     const liveReply = state.liveReplies.get(thread.dshSessionId)
     const latestTurn = turns.at(-1)
-    if (liveReply?.running && latestTurn !== undefined && (latestTurn.answer === null || latestTurn.answer.pending === true)) latestTurn.answer = { kind: 'assistant', text: liveReply.text, pending: true, at: new Date().toISOString() }
+    // A checkpoint is never the turn a stream belongs to: it is written while the agent is idle,
+    // and painting a reply onto it would turn the marker back into a question.
+    if (liveReply?.running && latestTurn !== undefined && latestTurn.compaction !== true && (latestTurn.answer === null || latestTurn.answer.pending === true)) latestTurn.answer = { kind: 'assistant', text: liveReply.text, pending: true, at: new Date().toISOString() }
     if (turns.length === 0) {
       const id = `${thread.id}:turn:empty`
       const positionKey = `${thread.id}:turn-index:0`
@@ -1230,6 +1270,7 @@ function canvasConnectors(cards) {
 function dotNode(card) {
   const classes = [
     'dot-node',
+    card.compaction === true ? 'is-compaction' : '',
     card.id === state.selectedCardId ? 'selected' : '',
     state.highlightCardIds?.has(card.id) === true && card.id !== state.selectedCardId ? 'on-path' : '',
     card.answer?.pending === true ? 'is-pending' : '',
@@ -1290,16 +1331,23 @@ function conversationCard(card, graph) {
   
   // State rides on the card as classes rather than as a row of words: the dot
   // breathes while a reply is being written, and a failed turn marks its edge.
-  const status = `${card.answer?.pending === true ? ' is-pending' : ''}${card.error === null ? '' : ' has-error'}`
+  const status = `${card.compaction === true ? ' is-compaction' : ''}${card.answer?.pending === true ? ' is-pending' : ''}${card.error === null ? '' : ' has-error'}`
 // A failed turn gets a panel of its own rather than a red line of text: the same
   // words the panel uses, with the message at full width instead of clamped into a
   // sentence. The card's edge and dot turn red with it, which is what still reads
   // when the canvas is zoomed out and the answer is not drawn at all.
   const failure = card.error === null ? '' : `<div class="card-failure" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 2.8 14.2 13H1.8L8 2.8Z"/><path d="M8 6.6v3.1"/><path d="M8 11.4h.01"/></svg><div><strong>本轮未完成</strong><p title="${escapeHtml(card.error.text)}">${escapeHtml(card.error.text)}</p></div></div>`
+  // A checkpoint is a marker on the line rather than a turn: it says what happened to the
+  // history behind it, in the one colour nothing else on the canvas uses. Its heading is the
+  // short label -- the summary belongs in the body, and reading it twice on one card is noise.
+  const heading = card.compaction === true ? '上下文已压缩' : card.question
+  const body = card.compaction === true
+    ? `<div class="card-compaction">${card.question === '' ? '' : renderMarkdown(card.question)}</div>`
+    : card.answer === null ? (card.error === null ? '<p class="thread-answer-empty">等待助手回复</p>' : '') : card.answer.pending && card.answer.text === '' ? '<p class="thread-answer-pending">正在回复</p>' : `${renderMarkdown(card.answer.text)}${card.answer.pending ? '<p class="thread-answer-pending">正在回复</p>' : ''}`
   return `<article class="thread-card${selected}${onPath}${status}" data-card-id="${escapeHtml(card.id)}" data-position-key="${escapeHtml(card.positionKey)}" data-thread="${card.dshThreadId}" style="left:${card.position.x}px;top:${card.position.y}px;--thread-color:#3478f6">
-    <button class="node-handle" data-drag-card="${card.id}" aria-label="拖动 ${escapeHtml(card.question)}" title="拖动卡片"></button>
-    <div class="thread-card-head"><span class="topic-dot"></span><button class="thread-title" data-action="open-card" data-thread="${card.dshThreadId}" data-card="${escapeHtml(card.id)}" title="查看完整会话：${escapeHtml(card.question)}">${escapeHtml(card.question)}</button></div>
-    <div class="thread-answer">${card.answer === null ? (card.error === null ? '<p class="thread-answer-empty">等待助手回复</p>' : '') : card.answer.pending && card.answer.text === '' ? '<p class="thread-answer-pending">正在回复</p>' : `${renderMarkdown(card.answer.text)}${card.answer.pending ? '<p class="thread-answer-pending">正在回复</p>' : ''}`}${failure}</div>
+    <button class="node-handle" data-drag-card="${card.id}" aria-label="拖动 ${escapeHtml(heading)}" title="拖动卡片"></button>
+    <div class="thread-card-head"><span class="topic-dot"></span><button class="thread-title" data-action="open-card" data-thread="${card.dshThreadId}" data-card="${escapeHtml(card.id)}" title="查看完整会话：${escapeHtml(heading)}">${escapeHtml(heading)}</button></div>
+    <div class="thread-answer">${body}${failure}</div>
     <footer><button data-action="open-dsh" data-thread="${card.dshThreadId}" data-seq="${Number.isInteger(card.sourceSeq) ? card.sourceSeq : ''}" title="在 DSH 中打开" aria-label="在 DSH 中打开"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5H4.5A1.5 1.5 0 0 0 3 5v6.5A1.5 1.5 0 0 0 4.5 13H11a1.5 1.5 0 0 0 1.5-1.5V9"/><path d="M9.5 3.5h3v3M12.4 3.6 7.5 8.5"/></svg>DSH</button><button data-action="archive-card" data-card="${escapeHtml(card.id)}" title="归档此节点及其之后" aria-label="归档此节点及其之后"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5h11M5.5 7v5.5a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1V7"/><path d="M4 5 5 2.8a.7.7 0 0 1 .6-.4h4.8a.7.7 0 0 1 .6.4L12 5M6 9.5h4"/></svg>归档</button></footer>
   </article>`
 }
@@ -1687,6 +1735,11 @@ function cardLineage(card) {
 // One turn as a pair of chat bubbles: what was asked, then what came back.
 // `current` marks the card the panel is open on.
 function cardBubblePair(card, current = false) {
+  // A checkpoint has no pair to show. It is the summary standing in for the history behind it,
+  // and it is drawn as the marker it is rather than as a question with a missing answer.
+  if (card.compaction === true) {
+    return `<div class="chat-turn${current ? ' is-current' : ''}"><div class="chat-bubble chat-bubble-compaction"><strong>上下文已压缩</strong>${card.question === '' ? '' : renderMarkdown(card.question)}</div></div>`
+  }
   const answer = card.answer === null
     ? card.error === null ? '<p class="card-context-pending">等待助手回复</p>' : ''
     : `${renderMarkdown(card.answer.text)}${card.answer.pending ? '<p class="card-context-pending">正在回复</p>' : ''}`
@@ -2042,6 +2095,11 @@ function applyPermissionPreset(preset) {
 // Putting the typed text in the markup would make every keystroke change the foot's HTML, so
 // the patch would rewrite the box -- and rewriting a focused textarea loses the caret.
 function inspectorComposer(card, thread) {
+  // A checkpoint is not a turn anyone can branch from: there is no answer under it to fork at.
+  // It says so, rather than offering the dead input a turn with no answer used to get.
+  if (card.compaction === true) {
+    return '<p class="composer-note">这是上下文压缩点，不能从这里分叉。继续往下走到你想分叉的那一轮。</p>'
+  }
   const usable = Number.isInteger(card.answer?.sourceSeq)
   const busy = state.inspectorSending === true || state.attaching === true || state.pendingReplies.has(thread.dshSessionId)
   // While the agent is asking, the input box waits its turn: the answer above is

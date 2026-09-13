@@ -739,7 +739,9 @@ function projectableEvent(event) {
   switch (event.type) {
     case 'user/message': {
       const text = contentText(event.data.content)
-      return isRuntimeContextText(text) ? null : noteProjection('user', text)
+      if (isRuntimeContextText(text)) return null
+      if (isCheckpointText(text)) return noteProjection('compaction', checkpointSummary(text))
+      return noteProjection('user', text)
     }
     case 'assistant/message':
       return noteProjection('assistant', contentText(event.data?.message?.content))
@@ -781,6 +783,27 @@ function isRuntimeContextText(text) {
 
 function isRuntimeContextMessage(message) {
   return message?.kind === 'user' && isRuntimeContextText(message.text)
+}
+
+// A compaction checkpoint lands as an ordinary `user/message`, so it has to be recognised here
+// too, or it is stored as a question that nothing ever answers: a node reading "等待助手回复"
+// whose composer is dead, because there is no answer under it to branch from. It is kept rather
+// than dropped -- it is a real node on the line -- but as its own kind, with the English preamble
+// and the tags DSH fences the summary with stripped off.
+const CHECKPOINT_OPENING = 'This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context.'
+const CHECKPOINT_OPEN_TAG = '<compacted-summary>'
+const CHECKPOINT_CLOSE_TAG = '</compacted-summary>'
+
+function isCheckpointText(text) {
+  return typeof text === 'string' && text.trimStart().startsWith(CHECKPOINT_OPENING)
+}
+
+function checkpointSummary(text) {
+  const body = typeof text === 'string' ? text : ''
+  const start = body.indexOf(CHECKPOINT_OPEN_TAG)
+  const end = body.lastIndexOf(CHECKPOINT_CLOSE_TAG)
+  if (start === -1 || end <= start) return body.trim()
+  return body.slice(start + CHECKPOINT_OPEN_TAG.length, end).trim()
 }
 
 function contentText(content) {
