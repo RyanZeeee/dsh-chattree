@@ -1,0 +1,67 @@
+{
+  "name": "dsh-chattree",
+  "version": "1.1.0",
+  "description": "A visual, non-linear conversation canvas for DeepSeek Harness (DSH) — every turn is a node, every question grows a branch. DSH 插件：把线性聊天记录变成一张可以看、可以点的对话地图。",
+  "author": "RyanZeeee",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "app.js",
+    "styles.css",
+    "test",
+    "docs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node --check index.js && node --check client.js && node --check app.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "dsh-desktop",
+    "deepseek",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "plugin",
+    "canvas",
+    "conversation",
+    "non-linear",
+    "branching"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RyanZeeee/dsh-chattree.git"
+  },
+  "homepage": "https://github.com/RyanZeeee/dsh-chattree#readme",
+  "bugs": {
+    "url": "https://github.com/RyanZeeee/dsh-chattree/issues"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "immediately": false
+    }
+  }
+}

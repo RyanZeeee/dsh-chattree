@@ -1,0 +1,757 @@
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1f2937; background: #f5f7fa; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #f5f7fa; }
+button, select, textarea { font: inherit; }
+button { border: 1px solid #d8dee8; border-radius: 6px; background: #fff; color: #374151; cursor: pointer; min-height: 32px; padding: 0 11px; }
+button:hover { border-color: #9ca3af; background: #f3f4f6; color: #111827; }
+button:disabled { cursor: not-allowed; opacity: .5; }
+button.primary { border-color: #111827; background: #111827; color: #fff; }
+button.primary:hover { border-color: #000; background: #000; color: #fff; }
+.chattree-shell { --sidebar-width: 280px; --sidebar-half: 140px; height: 100vh; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); grid-template-rows: 42px minmax(0, 1fr); overflow: hidden; }
+.chattree-shell.sidebar-collapsed { --sidebar-width: 56px; --sidebar-half: 28px; }
+.topbar { position: relative; grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; border: 0; background: #fff; }
+.brand, .top-actions, .view-switch, .thread-card-head, .compare-title { display: flex; align-items: center; }
+.sidebar-brand-row { box-sizing: border-box; display: flex; align-items: center; gap: 8px; height: 60px; flex: none; margin-bottom: 8px; padding: 8px 0 8px 4px; overflow: hidden; }
+.brand { gap: 8px; min-width: 0; flex: 1; }
+.brand strong { color: var(--ct-accent); font-size: 20px; font-weight: 600; letter-spacing: 0; }
+.sidebar-toggle { display: inline-grid; width: 28px; height: 28px; min-height: 28px; flex: none; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #6b7280; }
+.sidebar-toggle:hover { border: 0; background: #eef0f2; color: #374151; }
+.sidebar-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
+.top-actions { gap: 10px; }
+.view-switch { position: fixed; z-index: 80; top: 12px; left: 50%; gap: 2px; padding: 3px; transform: translateX(-50%); border: 1px solid #d1d5db; border-radius: 999px; background: rgba(255,255,255,.96); backdrop-filter: blur(10px); }
+.view-switch button { min-height: 28px; height: 28px; border: 0; border-radius: 999px; background: transparent; padding: 0 11px; color: #6b7280; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+.view-switch button:hover { background: #f3f4f6; color: #111827; }
+.view-switch button.active { background: #111827; color: #fff; }
+.view-switch button:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+.canvas-controls { position: fixed; z-index: 80; bottom: 18px; left: calc(var(--sidebar-width) + 16px); display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.canvas-controls button { position: relative; width: 32px; min-width: 32px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.canvas-controls button svg { width: 14px; height: 14px; flex: none; }
+.canvas-controls span { width: 100%; color: var(--ct-text-3); font-size: 10px; text-align: center; }
+.sidebar { grid-row: 1 / -1; display: flex; flex-direction: column; gap: 0; min-height: 0; padding: 6px 12px; border-right: 1px solid #e5e7eb; background: #f8f9fa; }
+.new-workspace { display: flex; width: calc(100% - 4px); min-height: auto; height: 38px; align-items: center; justify-content: center; gap: 6px; margin: 0 2px 8px; border-color: rgba(0,0,0,.1); border-radius: 12px; background: #fff; padding: 8px 16px; color: #111827; font-size: 14px; font-weight: 500; }
+.new-session-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.new-workspace:hover { border-color: rgba(0,0,0,.16); background: #f7f7f8; color: #111827; }
+.workspace-label, .sidebar-heading { color: #7c8798; font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.workspace-label { display: grid; gap: 9px; margin: 16px 4px 0; }
+.workspace-select { position: relative; display: block; }
+.workspace-select svg { position: absolute; top: 50%; left: 9px; width: 15px; height: 15px; transform: translateY(-50%); fill: none; pointer-events: none; stroke: #64748b; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
+.workspace-label select { width: 100%; min-height: 33px; border: 1px solid #d8dee8; border-radius: 6px; background: #fff; color: #374151; padding: 0 28px 0 30px; }
+.sidebar-heading { display: flex; align-items: center; justify-content: space-between; margin: 23px 4px 0; padding: 0; }
+.sidebar-heading button { display: grid; width: 24px; min-height: 24px; place-items: center; padding: 0; color: #111827; font-size: 17px; }
+.thread-tree { display: grid; gap: 3px; overflow: auto; padding-bottom: 12px; }
+.tree-row { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; background: transparent; color: #4b5563; text-align: left; }
+.tree-row:hover { background: #f3f4f6; }
+.tree-row.active { background: #e5e7eb; color: #111827; font-weight: 650; }
+.tree-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.tree-row i { margin-left: auto; color: #94a3b8; font-size: 10px; font-style: normal; }
+.tree-dot, .topic-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--thread-color, #374151); }
+.tree-row { --thread-color: #3478f6 !important; }
+.tree-empty { padding: 12px 5px; color: #94a3b8; font-size: 12px; }
+.main-stage { position: relative; grid-column: 2; min-width: 0; min-height: 0; overflow: hidden; background: #f5f7fa; }
+.sidebar-collapsed .sidebar { align-items: center; padding: calc(18px + var(--ct-rail-shift)) 10px 6px; }
+.sidebar-collapsed .sidebar-brand-row { width: 36px; height: 36px; margin-bottom: 12px; padding: 0; }
+.sidebar-collapsed .brand { display: none; }
+.sidebar-collapsed .sidebar-toggle { width: 36px; height: 36px; min-height: 36px; color: #111827; }
+/* The collapsed rail keeps one icon: the toggle. 新画布 stays a full-width button in the
+   open rail, where its label fits, and is hidden here rather than shrunk to a bare +. */
+.sidebar-collapsed .new-workspace { display: none; }
+.sidebar-collapsed .workspace-label, .sidebar-collapsed .sidebar-heading, .sidebar-collapsed .thread-tree { display: none; }
+.status-message { position: absolute; z-index: 6; top: 12px; right: 16px; display: flex; align-items: center; gap: 10px; max-width: 400px; padding: 9px 10px 9px 13px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; box-shadow: 0 3px 10px rgba(127,29,29,.12); }
+.status-message span { flex: 1; line-height: 1.5; }
+.status-message button { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #b91c1c; font-size: 15px; line-height: 1; }
+.status-message button:hover { background: #fee2e2; }
+.main-stage { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; background: #fff; }
+.canvas-view { position: relative; display: flex; min-height: 0; flex: 1; }
+/* The canvas void is light gray (matching the DSH main stage) instead of pure
+   white. The pointer stays the system arrow: panning is two-finger scroll or
+   Space+drag, so the canvas does not advertise itself with a custom hand
+   cursor. */
+.canvas-viewport { position: relative; width: 100%; height: 100%; min-height: 0; flex: 1; overflow: hidden; background: #f5f7fa; touch-action: none; cursor: default; }
+.canvas-viewport.is-panning { cursor: default; user-select: none; }
+/* While panning, promote the canvas to its own composited layer so the
+   browser GPU-transforms the whole subtree instead of repainting every card
+   and connector per frame. Zoom drops the layer to avoid upscaling a stale
+   raster (see zoomCanvas in app.js). */
+.canvas-viewport.is-panning .canvas-content { will-change: transform; }
+.canvas-content { position: absolute; inset: 0; transform-origin: 0 0; }
+.connectors { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.connectors path { fill: none; stroke: #93a4b8; stroke-width: 2.25; stroke-linecap: round; }
+.connectors path.active-connector { stroke: #3478f6; }
+.connectors .draft-connector { stroke: #3478f6; stroke-dasharray: 5 4; }
+.connectors path.selected-connector { stroke: #3478f6; stroke-width: 3; }
+.cards-layer { position: absolute; inset: 0; }
+.thread-card { position: absolute; display: grid; width: 310px; height: 276px; grid-template-rows: auto auto minmax(0, 1fr) auto; border: 1px solid #d8e0e8; border-radius: 7px; background: #fff; box-shadow: 0 3px 11px rgba(33,48,67,.08); overflow: visible; }
+.thread-card:hover { border-color: #9ca3af; box-shadow: 0 8px 20px rgba(33,48,67,.13); }
+.thread-card.selected { box-shadow: 0 0 0 2px rgba(17,24,39,.16), 0 8px 20px rgba(33,48,67,.13); }
+.node-handle { position: absolute; top: -8px; left: 50%; display: grid; width: 28px; height: 15px; min-height: 15px; place-items: center; transform: translateX(-50%); border: 1px solid #d8e0e8; border-radius: 4px; background: #fff; cursor: grab; padding: 0; }
+.node-handle::after { content: '...'; display: block; margin: -5px 0 0 2px; color: #94a3b8; font-size: 11px; letter-spacing: 1.5px; line-height: 1; }
+.thread-card-head { gap: 8px; min-width: 0; padding: 15px 12px 8px; }
+.thread-card-head .topic-dot { background: var(--thread-color); }
+.thread-title { min-width: 0; flex: 1; min-height: 22px; overflow: hidden; border: 0; background: transparent; padding: 0; color: #1f2937; font-size: 13px; font-weight: 720; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.thread-title:hover { background: transparent; color: #111827; }
+.selection-followup { position: fixed; z-index: 90; display: inline-flex; min-height: 30px; align-items: center; gap: 4px; transform: translateX(-100%); border-color: #3478f6; border-radius: 6px; background: #3478f6; padding: 0 8px; color: #fff; font-size: 12px; font-weight: 650; line-height: 1; box-shadow: 0 4px 12px rgba(37,99,235,.24); user-select: none; }
+.selection-followup:hover { border-color: #2563eb; background: #2563eb; color: #fff; }
+.selection-followup svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.selection-followup[hidden] { display: none; }
+.thread-answer { min-width: 0; min-height: 0; margin: 10px 14px; overflow-x: hidden; overflow-y: auto; color: #526174; font-size: 12px; line-height: 1.58; overflow-wrap: anywhere; overscroll-behavior: contain; touch-action: pan-y; scrollbar-color: #9ca3af transparent; scrollbar-width: thin; }
+.thread-answer::-webkit-scrollbar { width: 6px; height: 0; }
+/* Agent question panel: stands in for the built-in card, which the map hides. */
+.question-panel { position: absolute; z-index: 40; bottom: 18px; left: 50%; display: flex; width: min(680px, calc(100% - 48px)); max-height: min(62%, 430px); transform: translateX(-50%); flex-direction: column; border: 1px solid #d8e0e8; border-radius: 14px; background: #fff; box-shadow: 0 12px 34px rgba(33,48,67,.18); }
+.question-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 0 16px; }
+.question-eyebrow { color: #8a919b; font-size: 11px; font-weight: 600; }
+.question-dismiss { width: 24px; height: 24px; border: 0; border-radius: 999px; background: transparent; color: #8a919b; cursor: pointer; font-size: 16px; line-height: 1; }
+.question-dismiss:hover { background: #f3f4f6; color: #1f2937; }
+.question-panel-body { display: flex; min-height: 0; flex-direction: column; gap: 14px; overflow-y: auto; padding: 8px 16px 4px; }
+.question-item { display: flex; flex-direction: column; gap: 6px; }
+.question-header { margin: 0; color: #3478f6; font-size: 11px; font-weight: 650; }
+.question-text { margin: 0; color: #1f2937; font-size: 14px; font-weight: 600; line-height: 1.45; }
+.question-options { display: flex; flex-direction: column; gap: 2px; }
+.question-option { display: flex; cursor: pointer; flex-direction: column; gap: 2px; border: 1px solid transparent; border-radius: 10px; background: transparent; padding: 8px 10px; text-align: left; }
+.question-option:hover { background: #f3f4f6; }
+.question-option.selected { border-color: #c7d7ee; background: #eef4ff; }
+.question-option-label { color: #1f2937; font-size: 13px; font-weight: 550; }
+.question-option-desc { color: #6b7280; font-size: 12px; line-height: 1.4; }
+.question-custom { width: 100%; resize: vertical; border: 1px solid #d8e0e8; border-radius: 10px; background: #fbfcfe; padding: 8px 10px; color: #1f2937; font: inherit; font-size: 13px; }
+.question-custom:focus { border-color: #3478f6; outline: none; }
+.question-panel-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; }
+.question-panel-foot button { height: 32px; border-radius: 9px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.question-skip { border: 1px solid #d8e0e8; background: #fff; color: #6b7280; }
+.question-submit { border: 1px solid #111827; background: #111827; color: #fff; }
+[data-theme="dark"] .question-panel { border-color: #2a2d33; background: #1b1c1f; }
+[data-theme="dark"] .question-text { color: #e5e7eb; }
+[data-theme="dark"] .question-option.selected { border-color: #2f4a6b; background: #1d2733; }
+[data-theme="dark"] .question-option-label { color: #e5e7eb; }
+[data-theme="dark"] .question-custom { border-color: #2a2d33; background: #16171a; color: #e5e7eb; }
+[data-theme="dark"] .question-skip { border-color: #2a2d33; background: #1b1c1f; color: #9ca3af; }
+.thread-answer::-webkit-scrollbar-track { background: transparent; }
+.thread-answer::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #9ca3af; background-clip: padding-box; }
+.thread-answer::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+.thread-answer p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.thread-answer h1, .thread-answer h2, .thread-answer h3 { margin: 0 0 8px; color: #334155; font-size: 13px; line-height: 1.4; }
+.thread-answer ul, .thread-answer ol { margin: 0 0 8px; padding-left: 19px; }
+.thread-answer li + li { margin-top: 3px; }
+.thread-answer code { overflow-wrap: anywhere; border-radius: 3px; background: #eef2f5; padding: 1px 3px; color: #334155; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; }
+.thread-answer pre { margin: 0 0 8px; max-width: 100%; overflow-x: auto; border: 1px solid #e0e7ee; border-radius: 4px; background: #fff; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.thread-answer pre code { background: transparent; padding: 0; }
+.thread-answer table { display: block; max-width: 100%; margin: 0 0 8px; overflow-x: auto; border-collapse: collapse; font-size: 11px; }
+.thread-answer th, .thread-answer td { border: 1px solid #d8e0e8; padding: 4px 6px; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+.thread-answer th { background: #f5f7fa; font-weight: 720; }
+.thread-answer-empty { color: #94a3b8; }
+.thread-answer-pending { color: #374151; font-style: italic; }
+.thread-card footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; padding: 7px; border-top: 1px solid #edf0f3; }
+.thread-card footer button { min-height: 26px; padding: 0 7px; border: 0; display: inline-flex; align-items: center; gap: 4px; color: #526174; font-size: 11px; }
+.thread-card footer button svg { width: 13px; height: 13px; flex: none; }
+.thread-card footer button:hover { background: #f3f4f6; color: #111827; border-radius: 6px; }
+.thread-card footer .compare-button { margin-right: auto; color: #374151; }
+.thread-card footer .compare-button.selected { background: #e5e7eb; color: #111827; }
+.card-inspector { position: absolute; z-index: 30; top: 0; right: 0; bottom: 0; display: flex; width: min(460px, calc(100% - 72px)); min-width: 360px; max-width: calc(100% - 72px); flex-direction: column; border-left: 1px solid #dbe3ec; background: #fff; opacity: 1; transform: translateX(0); transition: transform 180ms cubic-bezier(.23,1,.32,1), opacity 150ms ease-out; }
+.card-inspector.is-opening, .card-inspector.is-closing { opacity: 0; transform: translateX(28px); }
+.card-inspector-head { display: grid; grid-template-columns: minmax(0, 1fr) auto 32px; gap: 10px; align-items: center; padding: 18px 20px 12px; background: #fff; }
+.card-inspector-close { display: grid; width: 32px; height: 32px; min-height: 32px; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #718096; }
+.card-inspector-close:hover { background: #eef2f6; color: #1f2937; }
+.card-inspector-close:active, .card-inspector-actions button:active { transform: scale(.97); }
+.card-inspector-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.card-inspector-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; padding: 24px 20px 20px; overscroll-behavior: contain; }
+.card-inspector-error { margin: 0; border-left: 3px solid #d92d20; padding: 3px 0 3px 10px; color: #7a271a; font-size: 13px; line-height: 1.65; }
+.card-inspector-error strong { display: block; color: #b42318; font-size: 12px; }
+.card-inspector-error p { margin: 5px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.card-inspector-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; padding: 11px 14px; border-top: 1px solid #e7edf3; background: #fff; }
+.card-inspector-actions button { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; padding: 0 9px; font-size: 11px; font-weight: 600; transition: transform 140ms ease-out, border-color 150ms ease, background 150ms ease, color 150ms ease; }
+.card-inspector-actions button svg { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
+/* The panel is the conversation: the history that led here as chat bubbles, then
+   the one input that either continues this line or branches off it. */
+.card-context { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px dashed #e2e8f0; }
+.card-context-pending { margin: 0; color: #a8b2bd; font-style: italic; }
+.chat-turn { display: flex; flex-direction: column; }
+.chat-turn + .chat-turn { margin-top: 18px; }
+.chat-bubble { font-size: 13px; line-height: 1.95; }
+.chat-bubble + .chat-bubble { margin-top: 12px; }
+.chat-bubble p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.chat-bubble > * + * { margin-top: 8px; }
+.chat-bubble ul, .chat-bubble ol { margin: 0; padding-left: 18px; }
+.chat-bubble li + li { margin-top: 4px; }
+.chat-bubble h1, .chat-bubble h2, .chat-bubble h3 { margin: 0; color: #1e293b; font-size: 13px; }
+.chat-bubble blockquote { margin: 0; border-left: 3px solid #dbe3ec; padding-left: 10px; color: #64748b; }
+.chat-bubble code { border-radius: 3px; background: #eef2f5; padding: 1px 3px; font-size: 11px; }
+.chat-bubble pre { max-width: 100%; margin: 0; overflow-x: auto; border: 1px solid #e0e7ee; border-radius: 6px; background: #f8fafc; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-bubble pre code { background: transparent; padding: 0; }
+.chat-bubble table { display: block; max-width: 100%; margin: 0; overflow-x: auto; border-collapse: collapse; font-size: 11px; }
+.chat-bubble th, .chat-bubble td { border: 1px solid #d8e0e8; padding: 4px 7px; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+.chat-bubble th { background: #f5f7fa; font-weight: 720; }
+/* The assistant answer is plain prose: no bubble, the full panel width. */
+.chat-bubble-assistant { width: 100%; color: #314057; }
+/* A question is a bubble that shrinks to its own text, up to a share of the
+   panel -- a long prompt wraps, a short one stays a small chip on the right. */
+.chat-bubble-user { align-self: flex-end; max-width: 82%; border-radius: 12px; background: #eaf1ff; padding: 8px 12px; color: #27375f; }
+.chat-bubble-user p { color: #27375f; }
+/* The panel can be dragged wider from its left edge, but never over the whole
+   canvas: it always leaves part of the map visible. */
+.card-inspector-resize { position: absolute; z-index: 2; top: 0; bottom: 0; left: -3px; width: 8px; cursor: col-resize; touch-action: none; }
+.card-inspector-resize::after { position: absolute; top: 50%; left: 3px; width: 2px; height: 34px; border-radius: 2px; background: transparent; transform: translateY(-50%); content: ''; }
+.card-inspector-resize:hover::after, .card-inspector-resize:active::after { background: #b9c7d8; }
+/* The agent's question lives in the panel while it is open. */
+.card-inspector .question-panel { position: static; width: auto; max-height: 46%; margin: 0; overflow-y: auto; transform: none; border: 0; border-top: 1px dashed #e2e8f0; border-radius: 0; background: transparent; box-shadow: none; padding: 12px 14px; }
+/* Opening the conversation in DSH is the quietest thing in the panel. */
+.card-inspector-actions { align-items: center; border-top: 0; background: transparent; padding: 0; }
+.card-inspector-actions button { border-color: transparent; background: transparent; color: #8390a0; }
+.card-inspector-actions button:hover { border-color: transparent; background: #eef2f6; color: #1f2937; }
+.inspector-composer { display: grid; flex: none; gap: 8px; padding: 12px 14px; border-top: 1px solid #e7edf3; background: #fbfcfe; }
+.inspector-composer textarea { min-height: 44px; max-height: 180px; resize: none; overflow-y: hidden; border: 1px solid #dbe3ec; border-radius: 10px; background: #fff; padding: 9px 11px; color: #334155; font: inherit; font-size: 14px; line-height: 1.75; }
+.inspector-composer textarea:focus { border-color: #3478f6; outline: none; }
+.inspector-composer textarea:disabled { background: #f4f6f9; color: #a8b2bd; }
+.inspector-composer button { min-height: 30px; border: 1px solid #3478f6; border-radius: 8px; background: #3478f6; padding: 0 14px; color: #fff; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.inspector-composer button:hover { border-color: #2563eb; background: #2563eb; }
+.inspector-composer button:disabled { border-color: #cbd5df; background: #cbd5df; cursor: not-allowed; }
+/* The way back to the bottom of the panel. It floats above the composer rather than taking
+   a slot in the column: a control that comes and goes must not nudge the content it sits
+   over, or the fix would reintroduce the jump it exists to repair. */
+.card-inspector-foot { position: relative; flex: none; }
+.inspector-jump { position: absolute; z-index: 1; bottom: calc(100% + 10px); left: 50%; display: grid; width: 28px; height: 28px; min-height: 28px; place-items: center; transform: translateX(-50%); border: 1px solid #dbe3ec; border-radius: 50%; background: #fff; padding: 0; color: #64748b; cursor: pointer; box-shadow: 0 2px 8px rgba(15,23,42,.14); }
+.inspector-jump[hidden] { display: none; }
+.inspector-jump:hover { border-color: #cbd5df; color: #1f2937; }
+.inspector-jump svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
+/* While the answer is still being written the affordance pings: there is more arriving
+   below and the reader is not looking at it. The colour stays as the signal when motion
+   is turned off. */
+.inspector-jump.is-live { border-color: #3478f6; color: #3478f6; }
+.inspector-jump.is-live::after { position: absolute; inset: -1px; border: 1px solid #3478f6; border-radius: 50%; content: ''; animation: inspector-jump-ping 1600ms ease-out infinite; }
+@keyframes inspector-jump-ping { 0% { opacity: .5; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(1.45); } }
+/* The panel's toolbar: attach, permission preset, model, context, send. */
+.composer-attachments { display: flex; flex-wrap: wrap; gap: 6px; }
+.composer-attachment { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; border: 1px solid #dbe3ec; border-radius: 999px; background: #fff; padding: 3px 4px 3px 10px; color: #475569; font-size: 11px; }
+.composer-attachment-name { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-attachment-size { color: #94a3b8; }
+.composer-attachment button { width: 16px; height: 16px; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #94a3b8; cursor: pointer; line-height: 1; }
+.composer-attachment button:hover { background: #eef2f6; color: #1f2937; }
+.composer-tool { display: inline-flex; height: 28px; align-items: center; gap: 6px; border: 1px solid #dbe3ec; border-radius: 8px; background: #fff; padding: 0 8px; color: #64748b; font-size: 11px; }
+.composer-tool:hover { border-color: #b9c7d8; background: #f4f7fb; }
+.composer-tool:disabled { opacity: .5; cursor: not-allowed; }
+.composer-attach { padding: 0 7px; }
+.composer-attach svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
+.composer-select { padding: 0; }
+.composer-select select { height: 28px; max-width: 148px; border: 0; border-radius: 8px; background: transparent; padding: 0 6px; color: inherit; font: inherit; font-size: 11px; }
+.composer-context { cursor: default; }
+.composer-context-bar { display: inline-block; width: 26px; height: 4px; border-radius: 2px; background: #e2e8f0; overflow: hidden; }
+.composer-context-bar > span { display: block; height: 100%; background: #3478f6; }
+/* The send control is an arrow: the action it performs is its tooltip and its
+   accessible name, so the toolbar stays compact. */
+.inspector-composer .composer-send { display: inline-flex; width: 34px; min-width: 34px; min-height: 30px; align-items: center; justify-content: center; border-radius: 8px; padding: 0; }
+.inspector-composer .composer-send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.draft-card { z-index: 2; height: auto; min-height: 228px; border-style: dashed; border-color: #9ca3af; box-shadow: 0 7px 19px rgba(17,24,39,.1); }
+.draft-card strong { color: #1f2937; font-size: 13px; }
+.draft-branch-form { display: grid; justify-items: center; gap: 10px; padding: 10px 12px 12px; }
+.draft-quick-phrases { display: flex; width: 100%; flex-wrap: wrap; gap: 6px; }
+.draft-quick-phrase, .draft-quick-phrase-add-button { min-height: 26px; border-color: #d8e0e8; border-radius: 999px; background: #f8fafc; padding: 0 9px; color: #526174; font-size: 11px; font-weight: 600; }
+.draft-quick-phrase:hover, .draft-quick-phrase-add-button:hover { border-color: #9bbcf7; background: #eef4ff; color: #2563eb; }
+.draft-quick-phrase-add-button { display: grid; width: 26px; place-items: center; padding: 0; }
+.draft-quick-phrase-add-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.6; }
+.draft-quick-editor { display: grid; width: 100%; gap: 7px; padding-bottom: 2px; }
+.draft-quick-editor-list { display: grid; gap: 5px; }
+.draft-quick-phrase-editor-row, .draft-quick-phrase-add { display: grid; grid-template-columns: minmax(0, 1fr) 28px; gap: 6px; }
+.draft-quick-phrase-editor-row input, .draft-quick-phrase-add input { min-width: 0; height: 28px; border: 1px solid #cbd8e3; border-radius: 5px; background: #fff; padding: 0 8px; color: #334155; font-size: 11px; outline-color: #3478f6; }
+.draft-quick-phrase-editor-row button, .draft-quick-phrase-add button { display: grid; width: 28px; min-height: 28px; place-items: center; border-radius: 5px; padding: 0; }
+.draft-quick-phrase-editor-row button { border-color: #d8e0e8; color: #64748b; }
+.draft-quick-phrase-editor-row button:hover { border-color: #f0b4b4; background: #fef2f2; color: #b91c1c; }
+.draft-quick-phrase-editor-row svg, .draft-quick-phrase-add svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.draft-quick-editor-close { justify-self: end; min-height: 26px; border: 0; background: transparent; padding: 0 6px; color: #64748b; font-size: 11px; }
+.draft-quick-editor-close:hover { background: #f3f4f6; color: #111827; }
+.draft-branch-form textarea { width: 100%; min-height: 104px; resize: vertical; border: 1px solid #cbd8e3; border-radius: 5px; padding: 8px 12px; color: #334155; outline-color: #3478f6; }
+.draft-actions { display: flex; width: 100%; justify-content: flex-end; gap: 8px; }
+.draft-actions button { display: grid; width: 32px; height: 32px; min-height: 32px; place-items: center; border-radius: 50%; background: #fff; padding: 0; color: #64748b; line-height: 0; }
+.draft-actions button.primary { border-color: #3478f6; background: #3478f6; color: #fff; }
+.draft-actions svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.empty-canvas, .compare-empty { display: grid; align-content: center; justify-items: center; height: 100%; padding: 32px; text-align: center; }
+.empty-canvas strong, .compare-empty strong { color: #334155; font-size: 16px; }
+.empty-canvas p, .compare-empty p { max-width: 460px; color: #64748b; font-size: 13px; line-height: 1.65; }
+.empty-canvas div { display: flex; gap: 8px; }
+.compare-view { height: 100%; overflow: auto; padding: 43px 38px; }
+.compare-view header { width: min(1050px, 100%); margin: 0 auto 24px; }
+.compare-columns { display: grid; width: min(1050px, 100%); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 auto; }
+.compare-columns article { overflow: hidden; border: 1px solid #dbe3eb; border-radius: 7px; background: #fff; }
+.compare-title { gap: 8px; padding: 16px; border-bottom: 1px solid #e8edf2; }
+.compare-title .topic-dot { background: var(--thread-color, #374151); }
+.compare-title h2 { min-width: 0; flex: 1; margin: 0; overflow: hidden; color: #1e293b; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.compare-title button { min-height: 27px; padding: 0 7px; font-size: 11px; }
+.compare-meta { margin: 12px 16px; color: #94a3b8; font-size: 11px; }
+.compare-notes { display: grid; gap: 1px; padding: 0 16px 16px; }
+.compare-notes p { margin: 0; padding: 11px 0; border-top: 1px solid #eef2f5; color: #475569; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+@media (max-width: 760px) { .chattree-shell { --sidebar-width: 200px; --sidebar-half: 100px; } .chattree-shell.sidebar-collapsed { --sidebar-width: 56px; --sidebar-half: 28px; } .sidebar { padding: 6px 10px; } .compare-view { padding: 26px 18px; } .compare-columns { grid-template-columns: 1fr; } .topbar { padding: 0 10px; } .brand strong { display: none; } .card-inspector { top: auto; width: 100%; min-width: 0; max-height: 78%; border-top: 1px solid #dbe3ec; border-left: 0; } .card-inspector.is-opening, .card-inspector.is-closing { transform: translateY(24px); } }
+@media (max-width: 560px) { .chattree-shell { min-width: 0; grid-template-columns: 1fr; } .sidebar { display: none; } .topbar, .main-stage { grid-column: 1; } .view-switch { left: 50%; } .top-actions > button { font-size: 11px; padding: 0 7px; } .thread-card { width: 280px; } }
+@media (prefers-reduced-motion: reduce) { .card-inspector { transition: opacity 120ms ease; } .card-inspector.is-opening, .card-inspector.is-closing { transform: none; } /* The ping ring has no animation to carry it away, so drop it entirely: the live colour is the signal. */ .inspector-jump.is-live::after { display: none; } }
+
+/* ── Dark theme: follows DSH's body[data-ds-dark-theme] via chattree:theme ── */
+[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"] body { background: #0f1115; color: #e6e8eb; }
+[data-theme="dark"] .chattree-shell { background: #0f1115; }
+[data-theme="dark"] .sidebar { border-right-color: #26282d; background: #15171b; }
+[data-theme="dark"] .topbar { background: #15171b; }
+[data-theme="dark"] .main-stage { background: #0f1115; }
+[data-theme="dark"] .canvas-viewport { background: #0f1115; }
+[data-theme="dark"] .canvas-content { background: #0f1115; }
+[data-theme="dark"] .connectors path { stroke: #4a515b; }
+[data-theme="dark"] .connectors path.active-connector { stroke: #5b8def; }
+[data-theme="dark"] .connectors path.selected-connector { stroke: #5b8def; }
+[data-theme="dark"] .connectors .draft-connector { stroke: #5b8def; }
+[data-theme="dark"] .thread-card { border-color: #2a2d33; background: #1b1c1f; box-shadow: 0 3px 11px rgba(0,0,0,.35); }
+[data-theme="dark"] .thread-card:hover { border-color: #4a4f57; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
+[data-theme="dark"] .thread-card.selected { box-shadow: 0 0 0 2px rgba(91,141,239,.4), 0 8px 20px rgba(0,0,0,.45); }
+[data-theme="dark"] .node-handle { border-color: #2a2d33; background: #1b1c1f; }
+[data-theme="dark"] .node-handle::after { color: #737a83; }
+[data-theme="dark"] .thread-title { color: #e6e8eb; }
+[data-theme="dark"] .thread-title:hover { color: #fff; }
+[data-theme="dark"] .selection-followup { border-color: #5b8def; background: #5b8def; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+[data-theme="dark"] .selection-followup:hover { border-color: #7ea6f5; background: #7ea6f5; color: #fff; }
+[data-theme="dark"] .thread-answer { color: #a7adb5; }
+[data-theme="dark"] .thread-answer h1, [data-theme="dark"] .thread-answer h2, [data-theme="dark"] .thread-answer h3 { color: #d7dae0; }
+[data-theme="dark"] .thread-answer code { background: #26282d; color: #d7dae0; }
+[data-theme="dark"] .thread-answer pre { border-color: #2a2d33; background: #15171b; }
+[data-theme="dark"] .thread-answer th, [data-theme="dark"] .thread-answer td { border-color: #2a2d33; }
+[data-theme="dark"] .thread-answer th { background: #222428; }
+[data-theme="dark"] .thread-answer-empty { color: #737a83; }
+[data-theme="dark"] .thread-answer-pending { color: #a7adb5; }
+[data-theme="dark"] .thread-card footer { border-top-color: #23262b; }
+[data-theme="dark"] .thread-card footer button { color: #a7adb5; }
+[data-theme="dark"] .thread-card footer button:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .thread-card footer .compare-button { color: #d7dae0; }
+[data-theme="dark"] .thread-card footer .compare-button.selected { background: #2a2d33; color: #fff; }
+[data-theme="dark"] .card-inspector { border-left-color: #2a2d33; background: #15171b; }
+[data-theme="dark"] .card-inspector-head { border-color: #2a2d33; background: #1b1c1f; }
+[data-theme="dark"] .card-inspector-actions { background: transparent; }
+[data-theme="dark"] .card-inspector-error { border-left-color: #f87171; color: #f0a3a3; }
+[data-theme="dark"] .card-inspector-error strong { color: #f87171; }
+[data-theme="dark"] .card-inspector-close { color: #8f959e; }
+[data-theme="dark"] .card-inspector-close:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .card-inspector-actions button { border-color: #3a3f47; background: #222428; color: #c6cbd2; }
+[data-theme="dark"] .card-inspector-actions button:hover { border-color: #4a4f57; background: #26282d; color: #fff; }
+[data-theme="dark"] .card-context { border-bottom-color: #26282d; }
+[data-theme="dark"] .chat-bubble-user { background: #1e2a45; color: #c9d4ea; }
+[data-theme="dark"] .chat-bubble-user p { color: #c9d4ea; }
+[data-theme="dark"] .chat-bubble-assistant { color: #d7dae0; }
+[data-theme="dark"] .chat-bubble h1, [data-theme="dark"] .chat-bubble h2, [data-theme="dark"] .chat-bubble h3 { color: #e6e8eb; }
+[data-theme="dark"] .chat-bubble blockquote { border-left-color: #3a3f47; color: #8f959e; }
+[data-theme="dark"] .chat-bubble code { background: #26282d; color: #d7dae0; }
+[data-theme="dark"] .chat-bubble pre { border-color: #2a2d33; background: #15171b; }
+[data-theme="dark"] .chat-bubble th, [data-theme="dark"] .chat-bubble td { border-color: #2a2d33; }
+[data-theme="dark"] .chat-bubble th { background: #222428; }
+[data-theme="dark"] .card-inspector .question-panel { border-bottom-color: #26282d; }
+[data-theme="dark"] .card-inspector-actions button { color: #8f959e; }
+[data-theme="dark"] .card-inspector-actions button:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .inspector-composer { border-top-color: #26282d; background: #0f1115; }
+[data-theme="dark"] .inspector-composer textarea { border-color: #2a2d33; background: #15171b; color: #e6e8eb; }
+[data-theme="dark"] .inspector-composer textarea:disabled { background: #1b1c1f; color: #6b7280; }
+[data-theme="dark"] .inspector-composer button:disabled { border-color: #2a2d33; background: #2a2d33; }
+[data-theme="dark"] .inspector-jump { border-color: #2a2d33; background: #1b1c1f; color: #9aa2ad; box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+[data-theme="dark"] .inspector-jump:hover { border-color: #3a3f47; color: #e6e8eb; }
+[data-theme="dark"] .inspector-jump.is-live { border-color: #5b8def; color: #5b8def; }
+[data-theme="dark"] .inspector-jump.is-live::after { border-color: #5b8def; }
+[data-theme="dark"] .composer-attachment { border-color: #2a2d33; background: #1b1c1f; color: #a7adb5; }
+[data-theme="dark"] .composer-tool { border-color: #2a2d33; background: #1b1c1f; color: #a7adb5; }
+[data-theme="dark"] .composer-tool:hover { border-color: #4a4f57; background: #222428; }
+[data-theme="dark"] .composer-context-bar { background: #2a2d33; }
+[data-theme="dark"] .composer-attachment button:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .draft-card { border-color: #4a4f57; box-shadow: 0 7px 19px rgba(0,0,0,.4); }
+[data-theme="dark"] .draft-card strong { color: #e6e8eb; }
+[data-theme="dark"] .draft-quick-phrase, [data-theme="dark"] .draft-quick-phrase-add-button { border-color: #3a3f47; background: #222428; color: #a7adb5; }
+[data-theme="dark"] .draft-quick-phrase:hover, [data-theme="dark"] .draft-quick-phrase-add-button:hover { border-color: #5b8def; background: #1e2a44; color: #7ea6f5; }
+[data-theme="dark"] .draft-quick-phrase-editor-row input, [data-theme="dark"] .draft-quick-phrase-add input { border-color: #2a2d33; background: #15171b; color: #e6e8eb; }
+[data-theme="dark"] .draft-quick-phrase-editor-row button { border-color: #3a3f47; background: #222428; color: #a7adb5; }
+[data-theme="dark"] .draft-quick-phrase-editor-row button:hover { border-color: #b75f5f; background: #2b1a1c; color: #f0a3a3; }
+[data-theme="dark"] .draft-quick-editor-close { color: #a7adb5; }
+[data-theme="dark"] .draft-quick-editor-close:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .draft-branch-form textarea { border-color: #2a2d33; background: #15171b; color: #e6e8eb; }
+[data-theme="dark"] .draft-actions button { background: #1b1c1f; color: #a7adb5; }
+[data-theme="dark"] .draft-actions button.primary { background: #3478f6; color: #fff; }
+[data-theme="dark"] .canvas-controls span { color: #8f959e; }
+[data-theme="dark"] .sidebar-toggle { color: #a7adb5; }
+[data-theme="dark"] .sidebar-toggle:hover { background: #26282d; color: #e6e8eb; }
+[data-theme="dark"] .new-workspace { border-color: rgba(255,255,255,.12); background: #1b1c1f; color: #e6e8eb; }
+[data-theme="dark"] .new-workspace:hover { border-color: rgba(255,255,255,.22); background: #222428; color: #fff; }
+[data-theme="dark"] .workspace-label, [data-theme="dark"] .sidebar-heading { color: #8f959e; }
+[data-theme="dark"] .workspace-label select { border-color: #2a2d33; background: #15171b; color: #e6e8eb; }
+[data-theme="dark"] .workspace-select svg { stroke: #8f959e; }
+[data-theme="dark"] .tree-row { color: #a7adb5; }
+[data-theme="dark"] .tree-row:hover { background: #26282d; }
+[data-theme="dark"] .tree-row.active { background: #2a2d33; color: #e6e8eb; }
+[data-theme="dark"] .tree-row i { color: #737a83; }
+[data-theme="dark"] .tree-empty { color: #737a83; }
+[data-theme="dark"] .empty-canvas strong { color: #d7dae0; }
+[data-theme="dark"] .empty-canvas p { color: #8f959e; }
+[data-theme="dark"] .status-message { border-color: #7a2e2e; background: #2b1a1c; color: #f0a3a3; box-shadow: 0 3px 10px rgba(0,0,0,.4); }
+[data-theme="dark"] .status-message button { color: #f0a3a3; }
+[data-theme="dark"] .status-message button:hover { background: #3a2326; }
+[data-theme="dark"] button { border-color: #2a2d33; background: #1b1c1f; color: #d7dae0; }
+[data-theme="dark"] button:hover { border-color: #4a4f57; background: #26282d; color: #fff; }
+[data-theme="dark"] button.primary { border-color: #3478f6; background: #3478f6; color: #fff; }
+[data-theme="dark"] button.primary:hover { border-color: #2563eb; background: #2563eb; color: #fff; }
+@media (max-width: 760px) { [data-theme="dark"] .card-inspector { border-top-color: #2a2d33; border-left: 0; } }
+
+/* ============================ theme layer =============================== */
+:root {
+  --ct-surface: #ffffff;
+  --ct-surface-2: #f8fafc;
+  --ct-surface-3: #eef2f7;
+  --ct-border: #e3e8ef;
+  --ct-border-strong: #cfd8e3;
+  --ct-text-1: #16202e;
+  --ct-text-2: #475569;
+  --ct-text-3: #8a97a8;
+  --ct-accent: #3478f6;
+  --ct-accent-ink: #2563eb;
+  --ct-accent-soft: #eef4ff;
+  --ct-radius-card: 12px;
+  --ct-radius-bubble: 12px;
+  --ct-radius-tool: 8px;
+  --ct-shadow-card: 0 1px 2px rgba(15,23,42,.05), 0 10px 22px -16px rgba(15,23,42,.28);
+  --ct-shadow-lift: 0 2px 4px rgba(15,23,42,.06), 0 18px 34px -18px rgba(15,23,42,.34);
+  --ct-shadow-panel: -20px 0 44px -30px rgba(15,23,42,.35);
+  --ct-ring: 0 0 0 3px var(--ct-accent-soft);
+  --ct-path-ring: 0 0 0 1.5px var(--ct-accent);
+  --ct-panel-pad: 64px;
+  --ct-rail-shift: 40px;
+  --ct-rail-gap: 0px;
+}
+[data-theme="dark"] {
+  --ct-surface: #191b20;
+  --ct-surface-2: #1e2126;
+  --ct-surface-3: #23262c;
+  --ct-border: #2c3037;
+  --ct-border-strong: #3c424b;
+  --ct-text-1: #e8eaee;
+  --ct-text-2: #b6bcc6;
+  --ct-text-3: #868e99;
+  --ct-accent: #5b8def;
+  --ct-accent-ink: #7ea6f5;
+  --ct-accent-soft: #1d2733;
+  --ct-shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 12px 26px -18px rgba(0,0,0,.75);
+  --ct-shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 20px 36px -20px rgba(0,0,0,.8);
+  --ct-shadow-panel: -20px 0 44px -30px rgba(0,0,0,.75);
+}
+
+/* ---------------------------------------------------------------- canvas card */
+/* A card is a portrait rectangle: question on top, answer below, actions at the
+   foot. It reads top-to-bottom like a page instead of left-to-right like a row,
+   which is what the old 310x276 box was doing -- and it gives the answer the
+   height it needs. The counters that used to sit between the question and the
+   answer (source, turn number, tool count, failure) are gone: the two states worth
+   seeing are carried by the card itself, as a breathing dot while a reply streams
+   in and a marked edge when a turn failed. */
+.thread-card {
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 260px; height: 380px; padding: 0; overflow: hidden;
+  border-color: var(--ct-border); border-radius: 14px; background: var(--ct-surface);
+  box-shadow: var(--ct-shadow-card);
+  transition: box-shadow 170ms cubic-bezier(.23,1,.32,1), border-color 170ms ease, transform 170ms cubic-bezier(.23,1,.32,1);
+}
+.thread-card:hover { border-color: var(--ct-border-strong); box-shadow: var(--ct-shadow-lift); transform: translateY(-1px); }
+.thread-card.selected { border-color: var(--ct-accent); box-shadow: var(--ct-shadow-lift), var(--ct-ring); }
+/* The branch line that leads to the selection: quieter than the card itself but clearly
+   part of the same path, so the lineage reads without hunting for it. */
+.thread-card.on-path { border-color: var(--ct-accent); box-shadow: var(--ct-path-ring); }
+/* The grab handle sits inside the card, so the rounded corners can clip safely. */
+.thread-card .node-handle {
+  position: absolute; top: 7px; left: 50%; width: 44px; height: 13px;
+  display: grid; place-items: center; transform: translateX(-50%);
+  border: 0; border-radius: 999px; background: transparent; padding: 0;
+}
+.thread-card .node-handle::after {
+  content: ''; display: block; width: 32px; height: 4px; margin: 0;
+  border-radius: 999px; background: var(--ct-border-strong);
+}
+.thread-card .node-handle:hover::after { background: var(--ct-text-3); }
+.thread-card-head {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 24px 18px 13px; border-bottom: 1px solid var(--ct-border);
+}
+.thread-card-head .topic-dot { margin-top: 6px; background: var(--ct-accent); }
+.thread-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  flex: 1; min-width: 0; border: 0; background: transparent; padding: 0;
+  color: var(--ct-text-1); font-size: 13.5px; font-weight: 650; line-height: 1.5;
+  white-space: normal; text-align: left;
+}
+.thread-title:hover { background: transparent; color: var(--ct-text-1); }
+.thread-answer {
+  min-width: 0; min-height: 0; margin: 0; padding: 14px 18px 16px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  color: var(--ct-text-2); font-size: 12.5px; line-height: 1.72;
+}
+.thread-card footer { padding: 8px 10px; border-top: 1px solid var(--ct-border); background: var(--ct-surface-2); }
+.thread-card footer button { min-height: 28px; padding: 0 9px; border-color: transparent; background: transparent; color: var(--ct-text-3); border-radius: 7px; }
+.thread-card footer button:hover { border-color: transparent; background: var(--ct-surface-3); color: var(--ct-text-1); }
+/* A failed turn: the card's edge and its dot turn red -- the part that still reads
+   when the canvas is zoomed out and the answer is not drawn -- and the answer holds
+   a panel with the heading and the message at full width. */
+.thread-card.has-error { border-color: #ef9a9a; }
+.thread-card.has-error .thread-card-head { border-bottom-color: #f6d5d5; }
+.thread-card.has-error .topic-dot { background: #e5484d; }
+.card-failure {
+  display: flex; gap: 9px; margin: 12px 0 0; padding: 11px 12px;
+  border: 1px solid #f6d5d5; border-radius: 10px; background: #fef2f2;
+}
+.card-failure svg { width: 15px; height: 15px; flex: none; margin-top: 1px; fill: none; stroke: #d64545; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.card-failure strong { display: block; color: #a3282e; font-size: 12px; font-weight: 650; }
+.card-failure p {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden;
+  margin: 3px 0 0; color: #b42318; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere;
+}
+[data-theme="dark"] .thread-card.has-error { border-color: #6d2b2b; }
+[data-theme="dark"] .thread-card.has-error .thread-card-head { border-bottom-color: #4a2323; }
+[data-theme="dark"] .card-failure { border-color: #5c2727; background: #2b1a1c; }
+[data-theme="dark"] .card-failure svg { stroke: #f0a3a3; }
+[data-theme="dark"] .card-failure strong { color: #f0a3a3; }
+[data-theme="dark"] .card-failure p { color: #e79a9a; }
+/* A reply being written breathes on the dot rather than announcing itself. */
+.thread-card.is-pending .topic-dot { animation: syn-card-pulse 1.1s ease-in-out infinite; }
+@keyframes syn-card-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.75); } }
+[data-theme="dark"] .thread-card footer { background: var(--ct-surface-2); }
+
+/* ------------------------------------------------------------- inspector panel */
+.card-inspector { background: var(--ct-surface); border-left-color: var(--ct-border); box-shadow: var(--ct-shadow-panel); }
+.card-inspector-head { background: var(--ct-surface); border-bottom: 1px solid var(--ct-border); }
+.chat-bubble-user { border-radius: var(--ct-radius-bubble); background: var(--ct-accent-soft); }
+.chat-bubble-assistant { color: var(--ct-text-2); }
+.inspector-composer { border-top: 0; background: transparent; }
+.inspector-jump { border-color: var(--ct-border); background: var(--ct-surface); color: var(--ct-text-2); box-shadow: var(--ct-shadow-card); }
+.inspector-jump:hover { border-color: var(--ct-border-strong); color: var(--ct-text-1); }
+.inspector-jump.is-live { border-color: var(--ct-accent); color: var(--ct-accent); }
+.inspector-jump.is-live::after { border-color: var(--ct-accent); }
+.inspector-composer textarea { border-color: var(--ct-border); border-radius: var(--ct-radius-tool); color: var(--ct-text-1); }
+.composer-tool { border-color: var(--ct-border); border-radius: var(--ct-radius-tool); background: var(--ct-surface); color: var(--ct-text-2); }
+.composer-tool:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
+.inspector-composer .composer-send { border-radius: var(--ct-radius-tool); }
+.card-inspector-actions button { border-radius: var(--ct-radius-tool); }
+
+/* ----------------------------------------------------------- rail and topbar */
+/* The rail's first block sat almost on the window edge: 6px of rail padding plus
+   8px inside the brand row put the Chat Tree wordmark 25px from the top, and 新会话
+   followed at 74px. The rail keeps its padding; the brand row gets the room
+   instead, so its own contents stay centred in it and everything below keeps its
+   own spacing. The collapsed rail has no brand row, so it takes the room as
+   padding. */
+.sidebar-brand-row { height: calc(60px + var(--ct-rail-shift)); margin-bottom: var(--ct-rail-gap); }
+.sidebar { background: var(--ct-surface-2); border-right-color: var(--ct-border); }
+.sidebar-heading { color: var(--ct-text-3); }
+.new-workspace { border-color: var(--ct-border); border-radius: var(--ct-radius-tool); background: var(--ct-surface); color: var(--ct-text-1); }
+.new-workspace:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
+.tree-row { border-radius: var(--ct-radius-tool); color: var(--ct-text-2); }
+.tree-row:hover { background: var(--ct-surface-3); color: var(--ct-text-1); }
+.tree-row.active { background: var(--ct-accent-soft); color: var(--ct-accent-ink); font-weight: 650; }
+.tree-row i { color: var(--ct-text-3); }
+.topbar { background: var(--ct-surface); border-bottom: 1px solid var(--ct-border); }
+.canvas-controls button { border-radius: var(--ct-radius-tool); box-shadow: var(--ct-shadow-card); }
+/* The strip floats over the canvas, so it carries its own frosted surface the way the
+   pill does, instead of relying on the top bar background. */
+.canvas-controls { border: 1px solid var(--ct-border); border-radius: 10px; background: rgba(255,255,255,.96); padding: 3px; backdrop-filter: blur(10px); }
+.canvas-controls button { border-color: transparent; background: transparent; }
+.canvas-controls button:hover { border-color: transparent; background: var(--ct-surface-3); }
+/* The strip carries icons only so it stays one icon wide; the label rides beside the
+   button on hover instead of sitting in the column, where 整理/定位 set its width. */
+.canvas-controls button::after {
+  position: absolute; top: 50%; left: calc(100% + 8px); transform: translateY(-50%);
+  border-radius: 6px; background: #111827; padding: 3px 8px; color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+  content: attr(data-label); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+}
+.canvas-controls button:hover::after, .canvas-controls button:focus-visible::after { opacity: 1; }
+/* ------------------------------------------------------- minimal dot canvas */
+/* A dot marks a turn and nothing else; the draft card still renders, because a brand new
+   canvas has no dots yet and the input is the only way in. The card box is 260x380, so a
+   dot is centred on it with a negative margin and the grid the layout already produced is
+   reused as-is; sharing one grid is what makes the mode toggle instant. */
+/* The dot graph leans on its lines: the nodes carry no text, so the connections have
+   to read at a glance. They are heavier and darker here than under the cards. */
+.connectors.is-dot path { stroke: #6d8199; stroke-width: 4.5; }
+.connectors.is-dot path.selected-connector { stroke: var(--ct-accent); stroke-width: 5.5; }
+
+.dot-node {
+  position: absolute; width: 200px; height: 200px; min-height: 200px; margin: -100px 0 0 -100px;
+  border: 0; border-radius: 50%; background: #9aabbd; padding: 0; cursor: pointer;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+.dot-node:hover { background: var(--ct-accent); box-shadow: 0 0 0 18px rgba(52,120,246,.16); }
+.dot-node.on-path { background: var(--ct-accent); }
+.dot-node.selected { background: var(--ct-accent); box-shadow: 0 0 0 13px var(--ct-accent-soft), 0 0 0 15px var(--ct-accent); }
+.dot-node.has-error { background: #e5484d; }
+.dot-node.is-pending { animation: syn-card-pulse 1.1s ease-in-out infinite; }
+/* The tooltip lives outside .canvas-content, so it keeps its own size at every zoom:
+   nothing here scales with the canvas. */
+.dot-tooltip {
+  position: fixed; z-index: 95; max-width: 340px; border-radius: 9px;
+  background: #111827; padding: 9px 12px; color: #fff; font-size: 14px; font-weight: 500;
+  line-height: 1.5; box-shadow: 0 8px 22px rgba(15,23,42,.24); pointer-events: none;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+}
+.dot-tooltip[hidden] { display: none; }
+/* The top bar is 56px tall and holds one thing: the 对话/Chat Tree pill, pinned at
+   12px from the top -- the same fixed offset the DSH page uses for its own copy of
+   that pill (client.js), so switching between 对话 and the canvas does not move or
+   restyle it. 整理/定位/缩放 sit at the bottom-left of the canvas instead, where
+   they are next to the work rather than in a bar above it. */
+.chattree-shell { --topbar-height: 56px; --view-switch-height: 36px; grid-template-rows: var(--topbar-height) minmax(0, 1fr); }
+
+/* --------------------------------------------------------------- dark faces */
+[data-theme="dark"] .card-inspector-head { background: var(--ct-surface); border-bottom-color: var(--ct-border); }
+[data-theme="dark"] .card-inspector-actions { background: transparent; }
+[data-theme="dark"] .inspector-composer { background: transparent; }
+[data-theme="dark"] .inspector-composer textarea { background: var(--ct-surface); color: var(--ct-text-1); }
+[data-theme="dark"] .composer-tool { background: var(--ct-surface); color: var(--ct-text-2); }
+[data-theme="dark"] .composer-tool:hover { background: var(--ct-surface-3); }
+[data-theme="dark"] .sidebar { background: var(--ct-surface-3); }
+[data-theme="dark"] .topbar { background: var(--ct-surface); }
+[data-theme="dark"] .tree-row.active { background: var(--ct-accent-soft); color: var(--ct-accent-ink); }
+
+/* --------------------------------------------------- panel text gutter */
+/* The head holds one thing now: the two buttons. It was written as a title row
+   (a 1fr text column beside a close column), so as a grid the buttons landed in
+   columns meant for other things; one right-aligned flex row keeps them together,
+   and the padding is symmetric so they sit on the head's own centre line.
+   Six pixels of vertical padding around 28px controls keeps the strip at 40px --
+   it used to be 60px (14 + 32 + 14), taller than the canvas top bar above it,
+   which read as a heavy band over a row of two small buttons. */
+.card-inspector-head { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 6px var(--ct-panel-pad); }
+.card-inspector-scroll { padding: 22px var(--ct-panel-pad) 20px; }
+.card-inspector .question-panel { padding: 12px var(--ct-panel-pad); }
+.inspector-composer { padding: 12px var(--ct-panel-pad) 32px; }
+/* The composer is a one-column grid, and an implicit column is sized to its content -- so the
+   tool row was laid out at its own max-content width and overflowed the panel whenever the
+   panel was narrower than that. Pinning the column to the container is what lets the row below
+   shrink its items instead. */
+.inspector-composer { grid-template-columns: minmax(0, 1fr); }
+/* 在 DSH 中打开 moved up into the panel head, next to the close button, so this
+   row is a grid cell there instead of the footer strip it was written as. Two
+   leftovers from that footer made the head look wrong: its own 64px side gutter
+   pushed the button away from the close circle and stretched the row, and its
+   14px bottom padding lifted the button 7px above the circle's centre line
+   (the head centres its three cells). Neither belongs in a grid cell, so the row
+   gets no padding of its own, and both buttons are pinned to one height. */
+.card-inspector-head .card-inspector-actions { padding: 0; }
+.card-inspector-head .card-inspector-actions button { min-height: 28px; padding: 0 10px; }
+.card-inspector-head .card-inspector-close { width: 28px; height: 28px; min-height: 28px; }
+/* The bubble wraps the textarea and the two pickers that live inside it. */
+.composer-input { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--ct-border); border-radius: 16px; background: var(--ct-surface); padding: 10px 12px 8px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+.composer-input:focus-within { border-color: var(--ct-accent); box-shadow: var(--ct-ring); }
+.composer-input textarea { border: 0; border-radius: 0; background: transparent; padding: 0; box-shadow: none; }
+.composer-input textarea:focus { border: 0; box-shadow: none; outline: none; }
+/* One line, always: the three buttons belong on the send row, so the row shrinks the model's
+   name away instead of wrapping and dropping send onto a second line. With the panel's 360px
+   floor the name collapses to an icon and everything still fits. */
+.composer-input-tools { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+/* The spacer is what holds the second group -- model, context, send -- against the right edge.
+   Send no longer carries the auto margin itself: with both, the free space would split between
+   them and the two groups would meet in the middle. */
+.composer-tools-spacer { flex: 1; min-width: 0; }
+.composer-input-tools .composer-tool { height: 24px; border-color: transparent; background: var(--ct-surface-3); color: var(--ct-text-2); }
+.composer-input-tools .composer-select select { height: 24px; max-width: 132px; }
+/* The option buttons. Three of them share the send row, so each one has to stay small: the
+   permission trigger is a bare shield, the model trigger keeps its name to a fixed width and
+   elides the rest, and the context trigger is a ring. `flex-wrap` on the row is the fallback --
+   at the panel's minimum width they wrap rather than overflow, and send keeps the right edge
+   either way. */
+.composer-trigger { gap: 5px; padding: 0 5px 0 6px; min-width: 0; }
+.composer-trigger.is-compact { padding: 0 4px; gap: 3px; }
+/* The three sit on the composer's own surface rather than on a pill of their own -- white on
+   the white box, so at rest they are only their glyphs and they take a shape under the pointer.
+   `transparent` rather than a white token because the box they sit on is the thing being
+   matched, and that holds in either theme. The doubled class is deliberate: the row's own
+   `.composer-tool` background (and its dark override) has to lose to it whichever order the
+   file ends up in. */
+.composer-input-tools .composer-trigger.composer-tool { background: transparent; }
+[data-theme="dark"] .composer-input-tools .composer-trigger.composer-tool { background: transparent; }
+/* Hover and open are the same quiet outline the attach button wears: a border and a slightly
+   stronger glyph, nothing filled in. */
+.composer-input-tools .composer-trigger:hover:not(:disabled),
+.composer-input-tools .composer-trigger.is-open { border-color: var(--ct-border-strong); color: var(--ct-text-1); }
+/* Every glyph in the row takes its colour from the button it sits in, so the whole row is one
+   tone: `--ct-text-2` at rest and `--ct-text-1` under the pointer, for the paperclip, the shield,
+   the model mark, the name and the chevrons alike. */
+.composer-trigger-icon { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.3; }
+.composer-trigger-label { flex: 0 1 auto; min-width: 0; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-menu-chevron { width: 12px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; transition: transform 120ms ease; }
+.composer-trigger.is-open .composer-menu-chevron { transform: rotate(180deg); }
+.composer-ring { width: 24px; padding: 0; justify-content: center; }
+/* The ring states its whole box, and it has to: `.inspector-composer button` is the send
+   button's rule (`padding: 0 14px`, `min-height: 30px`) and it applies to every button in the
+   composer. Its padding alone was wider than this button, so the svg was squeezed to 0px and
+   painted nothing -- an invisible button at rest. The doubled class is what outranks that rule. */
+.composer-input-tools .composer-trigger.composer-ring { width: 30px; min-width: 30px; height: 30px; padding: 0; justify-content: center; }
+.composer-ring-svg { width: 20px; height: 20px; flex: none; }
+/* The groove stays a step lighter than the mark inside it -- that is what makes it read as a
+   meter rather than a filled dot -- and the mark follows the row like every other glyph. */
+.composer-ring-track { fill: none; stroke: var(--ct-border-strong); stroke-width: 2; }
+.composer-ring-fill { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.composer-ring-glyph { fill: currentColor; stroke: none; }
+
+/* The open menu. It is parked above the composer -- the offset is measured at patch time
+   because the box grows as it is typed into -- and it never scrolls with the answer above. */
+.composer-menu { position: absolute; z-index: 45; right: var(--ct-panel-pad); left: var(--ct-panel-pad); max-height: min(60%, 340px); overflow-y: auto; border: 1px solid var(--ct-border); border-radius: 12px; background: var(--ct-surface); padding: 6px; color: var(--ct-text-1); box-shadow: var(--ct-shadow-card); }
+.composer-menu-model, .composer-menu-permission { display: flex; flex-direction: column; gap: 1px; }
+.composer-menu-scroll { display: flex; min-height: 0; flex-direction: column; gap: 2px; }
+.composer-menu-group { display: flex; flex-direction: column; gap: 1px; }
+.composer-menu-group-label { padding: 6px 8px 3px; color: var(--ct-text-3); font-size: 10px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.composer-menu-row { display: flex; width: 100%; min-height: 30px; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 4px 8px; color: var(--ct-text-1); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.composer-menu-row:hover { background: var(--ct-surface-3); }
+.composer-menu-row.is-active { background: var(--ct-accent-soft, var(--ct-surface-3)); }
+.composer-menu-row-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.composer-menu-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-menu-row-detail { overflow: hidden; color: var(--ct-text-3); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.composer-menu-check { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--ct-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.composer-menu-note { margin: 0; padding: 8px; color: var(--ct-text-3); font-size: 11px; line-height: 1.6; }
+.composer-menu-efforts { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--ct-border); margin-top: 4px; }
+.composer-menu-chip-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 4px; }
+.composer-menu-chip { min-height: 24px; border: 1px solid var(--ct-border); border-radius: 999px; background: transparent; padding: 0 10px; color: var(--ct-text-2); font: inherit; font-size: 11px; cursor: pointer; }
+.composer-menu-chip:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
+.composer-menu-chip.is-active { border-color: var(--ct-accent); background: var(--ct-accent-soft, var(--ct-surface-3)); color: var(--ct-text-1); font-weight: 650; }
+/* Lifting the sandbox is asked for twice: a single mis-click must not trade every guard rail
+   for a silent session. */
+.composer-menu-confirm { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.composer-menu-confirm strong { font-size: 12px; }
+.composer-menu-confirm p { margin: 0; color: var(--ct-text-2); font-size: 11px; line-height: 1.6; }
+.composer-menu-confirm-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.composer-menu-button { min-height: 26px; border: 1px solid var(--ct-border); border-radius: 8px; background: transparent; padding: 0 10px; color: var(--ct-text-2); font: inherit; font-size: 11px; cursor: pointer; }
+.composer-menu-button:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
+.composer-menu-button.is-danger { border-color: #d92d20; background: #d92d20; color: #fff; font-weight: 650; }
+.composer-menu-button.is-danger:hover { border-color: #b42318; background: #b42318; }
+/* The context reading: the number, then the split the Host priced. */
+.composer-menu-context { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.composer-context-head { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.composer-context-headline { color: var(--ct-text-3); }
+.composer-context-percent { color: var(--ct-text-1); font-weight: 650; }
+.composer-context-figures { margin-left: auto; color: var(--ct-text-1); font-variant-numeric: tabular-nums; }
+.composer-context-bar { display: flex; height: 4px; gap: 1px; overflow: hidden; border-radius: 999px; background: var(--ct-surface-3); }
+.composer-context-segment { display: block; height: 100%; min-width: 2px; }
+.composer-context-segment.segment-0 { background: #8fa8c8; }
+.composer-context-segment.segment-1 { background: #a78bfa; }
+.composer-context-segment.segment-2 { background: #3478f6; }
+.composer-context-segment.segment-total { background: var(--ct-text-3); }
+.composer-context-rows { margin: 0; }
+.composer-context-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0; font-size: 11px; }
+.composer-context-row dt { display: inline-flex; align-items: center; color: var(--ct-text-2); }
+.composer-context-row dd { margin: 0; color: var(--ct-text-1); font-variant-numeric: tabular-nums; }
+.composer-context-swatch { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+/* The one write in a read-only menu, so it is set apart from the numbers above it -- and it is
+   the only thing here that a click can start, which is what `is-primary` says. */
+.composer-menu-action { display: flex; min-height: 30px; align-items: center; gap: 8px; border: 0; border-top: 1px solid var(--ct-border); background: transparent; margin-top: 2px; padding: 8px; color: var(--ct-text-2); font: inherit; font-size: 12px; text-align: left; }
+button.composer-menu-action { border-radius: 8px; cursor: pointer; }
+button.composer-menu-action:hover:not(:disabled) { background: var(--ct-surface-3); }
+button.composer-menu-action.is-primary { color: var(--ct-accent); font-weight: 650; }
+button.composer-menu-action:disabled { color: var(--ct-text-3); cursor: default; }
+.composer-menu-action[aria-disabled="true"] { color: var(--ct-text-3); }
+.composer-menu-action.is-busy { color: var(--ct-text-3); }
+.composer-menu-action-spinner { width: 11px; height: 11px; flex: none; border: 1.6px solid var(--ct-border-strong); border-top-color: var(--ct-accent); border-radius: 50%; animation: composer-spin .8s linear infinite; }
+@keyframes composer-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .composer-menu-action-spinner { animation-duration: 2.4s; } }
+[data-theme="dark"] .composer-input { background: var(--ct-surface-2); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+[data-theme="dark"] .composer-input-tools .composer-tool { background: var(--ct-surface-3); color: var(--ct-text-2); }
+[data-theme="dark"] .composer-menu-button.is-danger { border-color: #e5484d; background: #e5484d; color: #1b1c1f; }
+/* The attach control is deliberately quiet, and quiet now means the same thing it means for the
+   three option buttons: on the composer's own surface, in the row's one tone, taking an outline
+   under the pointer. The doubled class keeps the row's own `.composer-tool` background (and the
+   dark override of it that sits earlier in this file) from putting it back on a pill. */
+.inspector-composer .composer-attach.composer-tool { border-color: transparent; background: transparent; color: var(--ct-text-2); }
+/* The hover border here is stated rather than inherited: `.inspector-composer button:hover` is
+   the send button's rule, and it was painting this one accent blue. */
+.inspector-composer .composer-attach.composer-tool:hover { border-color: var(--ct-border-strong); background: transparent; color: var(--ct-text-1); }
+[data-theme="dark"] .inspector-composer .composer-attach.composer-tool { background: transparent; color: var(--ct-text-2); }
+.chat-bubble-user { margin-left: 0; }
+@media (max-width: 760px) { :root { --ct-panel-pad: 20px; } }
+
