@@ -50,6 +50,19 @@ const savedInspectorWidth = (() => {
     return Number.isFinite(stored) ? Math.max(INSPECTOR_MIN_WIDTH, stored) : null
   } catch { return null }
 })()
+
+// Which workspaces the rail has open. A workspace is a folder in the tree, not a mode the
+// reader is in: clicking one folds it, and the canvas follows whichever canvas was clicked.
+const RAIL_OPEN_KEY = 'dsh-chattree:rail-open:v1'
+const savedRailOpen = (() => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(RAIL_OPEN_KEY) ?? '[]')
+    return Array.isArray(stored) ? stored.filter(id => typeof id === 'string') : []
+  } catch { return [] }
+})()
+function persistRailOpen() {
+  try { localStorage.setItem(RAIL_OPEN_KEY, JSON.stringify([...state.railOpen])) } catch { /* Private browsing may disable local storage. */ }
+}
 // Branch anchors and collapse roots used to be remembered here, keyed by card ids that
 // have since been re-keyed (see the id comment in conversationCards). Neither is worth
 // migrating: a branch's fork point has a durable server-side record (sourceSeedLength)
@@ -87,6 +100,7 @@ const state = {
   dshWorkspaces: [], selectedDshWorkspaceId: null,
   historyBySession: new Map(), historyRequests: new Map(), pendingReplies: new Map(), pendingRpc: new Map(), liveReplies: new Map(),
   draft: null, error: '', workspaceLoad: 0, branchAnchors: new Map(savedBranchAnchors), cardPositions: new Map(savedCardPositions), cardPositionsResetAt: 0, collapsedCardIds: new Set(savedCollapsedCards), quickPhrases: savedQuickPhrases, quickPhraseEditorOpen: false, canvasStyle: savedCanvasStyle,
+  railOpen: new Set(savedRailOpen), railCache: new Map(), railLoading: new Set(),
   dragging: false, canvasGesture: false, canvasRefreshAfter: 0, canvasViewInitialized: false, canvasCamera: { x: 0, y: 0 }, mapCardSessionSwitches: new Set(),
   canvasCards: undefined, canvasCardsById: undefined, canvasGraph: undefined, mountedCardIds: new Set(), canvasNeedsCenter: false, highlightCardIds: new Set(),
   inspectorCardId: null, inspectorOpening: false, inspectorInputs: new Map(), inspectorSending: false, inspectorWidth: savedInspectorWidth, composer: { requestedFor: null, requestId: null, failedFor: null, retryAfter: 0, sessionId: null, models: [], model: null, catalogError: null, permissions: [], permission: null, context: null, breakdown: null, canCompact: false }, attachments: [], attaching: false, composerMenu: null, composerConfirmPreset: null, compacting: false, compactNote: null, inspectorFollow: true, inspectorThreadId: null, inspectorFollowNewest: false, inspectorRendered: false, focusThreadId: null, focusCardId: null, focusRequestedAt: 0,
@@ -262,19 +276,63 @@ function currentDshThread(threads = state.workspace?.threads ?? []) {
 // DSH's synthesised catch-all workspace, which is never offered as a choice.
 const UNGROUPED_WORKSPACE_ID = 'dsh-ungrouped'
 
-// The picker offers the workspaces the user actually has. The catch-all stays in
-// state.dshWorkspaces so a session that lands there still resolves, but it is not
-// something to choose between.
-function listedWorkspaces() {
-  return workspaceChoices().filter(workspace => workspace.id !== UNGROUPED_WORKSPACE_ID)
-}
-
 function workspaceChoices() {
   if (state.dshWorkspaces.length > 0) return state.dshWorkspaces.map(workspace => ({ ...workspace, source: 'dsh' }))
   return state.summaries.map(workspace => ({ id: workspace.id, title: workspace.title, path: workspace.cwd, sessionIds: [], source: 'projection' }))
 }
 
-async function threadsForDshWorkspace(workspace) {
+// ---------------------------------------------------------------------------
+// The rail: workspaces, and the canvases that live in them
+//
+// A workspace is a directory DSH knows about; a canvas is one conversation family -- the root
+// session and every branch hanging off it. The two levels are both DSH's, so the rail never
+// invents a name or a grouping of its own: the workspace title is DSH's, the canvas title is its
+// root session's title, and both are renamed through DSH.
+//
+// Only the canvas's own workspace is held in memory (state.workspace). The rest are fetched when
+// a group is opened and kept in railCache, so a rail with ten workspaces does not read ten
+// workspaces on every tick.
+// ---------------------------------------------------------------------------
+
+// The active workspace's threads are already loaded, so its group never needs a fetch; the rest
+// are read once and remembered. A group that is open, unloaded and not already loading starts
+// its own load -- guarded by railLoading so a failing read cannot become a render loop.
+function railModel() {
+  const activeWorkspaceId = state.selectedDshWorkspaceId
+  return workspaceChoices().map(workspace => {
+    const active = workspace.id === activeWorkspaceId
+    const ownThreads = state.workspace !== null && state.workspace.id === `dsh:${workspace.id}` ? state.workspace.threads : null
+    const expanded = active || state.railOpen.has(workspace.id)
+    const cached = ownThreads ?? state.railCache.get(workspace.id) ?? null
+    if (expanded && cached === null && !state.railLoading.has(workspace.id)) void loadRailGroup(workspace)
+    return {
+      workspace,
+      active,
+      expanded,
+      loading: cached === null,
+      canvases: cached === null ? [] : listedCanvases(cached)
+    }
+  })
+}
+
+async function loadRailGroup(workspace) {
+  state.railLoading.add(workspace.id)
+  try {
+    state.railCache.set(workspace.id, await threadsForDshWorkspace(workspace, { recordArchive: false }))
+  } catch (error) {
+    // An empty group rather than a perpetual "loading": the banner carries the reason.
+    state.railCache.set(workspace.id, [])
+    setError(error)
+  } finally {
+    state.railLoading.delete(workspace.id)
+    if (canReplaceView()) render()
+  }
+}
+
+// Reading another workspace's threads for the rail must not touch the archive set: that
+// variable is what the *canvas's* workspace load reports, and overwriting it from a second
+// workspace would make the canvas inherit the wrong archive the next time it opens.
+async function threadsForDshWorkspace(workspace, { recordArchive = true } = {}) {
   if (workspace.sessionIds.length === 0) return []
   const requested = new Set(workspace.sessionIds)
   const projections = await Promise.all(state.summaries.map(summary => api(`/chattree/api/workspaces/${summary.id}`)))
@@ -285,6 +343,7 @@ async function threadsForDshWorkspace(workspace) {
     const ids = projection.workspace.archivedCardIds
     if (Array.isArray(ids) && ids.length > 0) roots.push(...ids)
   }
+  if (!recordArchive) return projections.flatMap(projection => projection.workspace.threads.filter(thread => requested.has(thread.dshSessionId)))
   fetchedArchiveRoots = roots
   return projections.flatMap(projection => projection.workspace.threads.filter(thread => requested.has(thread.dshSessionId)))
 }
@@ -374,6 +433,30 @@ async function refreshProjection() {
   if (state.selectedDshWorkspaceId !== null) await openDshWorkspace(state.selectedDshWorkspaceId, { preserveCanvasCamera: true })
   else await openWorkspace(state.workspace.id, { preserveCanvasCamera: true })
   return true
+}
+
+// Open one canvas: its lineage becomes what the board draws, the camera re-frames to it, and
+// DSH is told which session is current so the two surfaces agree. Shared by the rail row and the
+// card click, because a canvas reached from another workspace has to do exactly the same thing.
+function selectCanvas(thread) {
+  state.mapCardSessionSwitches.clear()
+  state.activeId = thread.id
+  state.selectedCardId = null
+  state.inspectorCardId = null
+  state.inspectorOpening = false
+  state.error = ''
+  // Choosing a conversation leaves any new-session canvas behind.
+  if (state.draft?.kind === 'new') state.draft = null
+  if (state.workspace !== null) revealConversationThread(conversationCards(state.workspace.threads), thread.id)
+  // Each canvas is its own coordinate space, so the camera left over from the previous one
+  // framed empty space. Centre on this canvas's cards, the way 定位 does, once they are mounted.
+  state.canvasViewInitialized = false
+  render()
+  window.requestAnimationFrame(() => focusActiveCard())
+  void loadThreadHistory(thread)
+  // Bidirectional current-session sync: switch DSH's current session without closing the map;
+  // the client confirms via chattree:current-session.
+  if (thread.dshSessionId !== null) post('chattree:activate-session', { sessionId: thread.dshSessionId })
 }
 
 function openNewSession() {
@@ -1559,8 +1642,21 @@ function ensureShell() {
   return shell
 }
 
-function sidebarHtml(threads, selectedWorkspaceId) {
-  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button><label class="workspace-label"><span>工作区</span><span class="workspace-select"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 4.75h3l1.2 1.5h6.8v5.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z"/></svg><select data-action="select-workspace" aria-label="选择工作区" ${state.draft !== null ? 'disabled' : ''}>${listedWorkspaces().map(item => `<option value="${item.id}" title="${escapeHtml(item.path ?? item.title)}" ${item.id === selectedWorkspaceId ? 'selected' : ''}>${escapeHtml(item.title)}</option>`).join('')}</select></span></label><div class="sidebar-heading"><span>画布</span></div><nav class="thread-tree">${listedCanvases(threads).map(thread => `<button class="tree-row ${thread.id === state.activeId ? 'active' : ''}" data-action="select-thread" data-thread="${thread.id}" style="--thread-color:#374151"><span class="tree-dot"></span><span>${escapeHtml(threadListTitle(thread))}</span>${thread.parentId === null ? '' : '<i>分支</i>'}</button>`).join('') || '<p class="tree-empty">暂未同步画布</p>'}</nav>`
+// The rail, as two levels: workspace, and the canvases inside it. A row folds; a canvas row
+// opens that canvas. Both names are DSH's own, so neither level keeps a copy that could drift
+// from what DSH shows.
+function sidebarHtml(rail) {
+  const groups = rail.map(group => {
+    const name = escapeHtml(group.workspace.title)
+    const where = escapeHtml(group.workspace.path ?? group.workspace.title)
+    const caret = `<span class="rail-caret${group.expanded ? ' is-open' : ''}" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m6.2 3.8 4 4.2-4 4.2"/></svg></span>`
+    const workspaceRow = `<button class="workspace-row${group.active ? ' active' : ''}" type="button" data-action="toggle-rail-group" data-workspace="${escapeHtml(group.workspace.id)}" aria-expanded="${group.expanded}" title="${where}">${caret}<span class="rail-workspace-name">${name}</span></button>`
+    if (!group.expanded) return `<section class="rail-group">${workspaceRow}</section>`
+    const rows = group.canvases.map(thread => `<button class="tree-row ${thread.id === state.activeId ? 'active' : ''}" data-action="select-thread" data-thread="${escapeHtml(thread.id)}" data-workspace="${escapeHtml(group.workspace.id)}" style="--thread-color:#374151"><span class="tree-dot"></span><span class="tree-name">${escapeHtml(threadListTitle(thread))}</span>${thread.parentId === null ? '' : '<i>分支</i>'}</button>`).join('')
+    const empty = group.canvases.length > 0 ? rows : `<p class="tree-empty">${group.loading ? '正在载入…' : '还没有画布'}</p>`
+    return `<section class="rail-group">${workspaceRow}<nav class="thread-tree">${empty}</nav></section>`
+  }).join('')
+  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button>${groups || '<p class="tree-empty">暂未同步工作区</p>'}`
 }
 
 function topbarHtml(canvasControls) {
@@ -2522,10 +2618,11 @@ function render() {
   state.inspectorRendered = inspectorModel !== null
   const choices = workspaceChoices()
   const selectedWorkspaceId = state.selectedDshWorkspaceId ?? workspace?.id
+  const rail = railModel()
   const canvasControls = state.mode === 'canvas' && (threads.length > 0 || state.draft?.kind === 'new') ? `<div class="canvas-controls"><button data-action="layout" aria-label="整理" data-label="整理"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></button><button data-action="focus-active" aria-label="定位" data-label="定位"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v2.6M8 11.9v2.6M1.5 8h2.6M11.9 8h2.6"/></svg></button><button data-action="zoom-in" aria-label="放大" data-label="放大"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg></button><span>${Math.round(state.zoom * 100)}%</span><button data-action="zoom-out" aria-label="缩小" data-label="缩小"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.5 8h9"/></svg></button><button data-action="toggle-canvas-style" aria-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" data-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" aria-pressed="${state.canvasStyle === 'dot' ? 'true' : 'false'}"><svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="1.6"/><circle cx="12" cy="4" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/></svg></button></div>` : ''
   const shellElement = ensureShell()
   shellElement.classList.toggle('sidebar-collapsed', state.sidebarCollapsed === true)
-  patchSlot(shellElement.querySelector('.sidebar'), sidebarHtml(threads, selectedWorkspaceId))
+  patchSlot(shellElement.querySelector('.sidebar'), sidebarHtml(rail))
   patchSlot(shellElement.querySelector('.topbar'), topbarHtml(canvasControls))
   const stage = shellElement.querySelector('.main-stage')
   if (stage instanceof HTMLElement) {
@@ -3089,28 +3186,32 @@ app.addEventListener('click', async event => {
       return
     }
     if (button.dataset.action === 'toggle-sidebar') { state.sidebarCollapsed = !state.sidebarCollapsed; render() }
+    if (button.dataset.action === 'toggle-rail-group') {
+      const id = button.dataset.workspace
+      if (id === undefined) return
+      if (state.railOpen.has(id)) state.railOpen.delete(id)
+      else state.railOpen.add(id)
+      persistRailOpen()
+      render()
+      return
+    }
     if (button.dataset.action === 'create-session') openNewSession()
     if (button.dataset.action === 'open-current' && state.currentDsh !== null) post('chattree:open-session', { sessionId: state.currentDsh.id })
+    if (button.dataset.action === 'select-thread' && button.dataset.workspace !== undefined && button.dataset.workspace !== state.selectedDshWorkspaceId) {
+      // A canvas in another workspace: the canvas view shows one workspace at a time, so the
+      // workspace follows the canvas rather than the reader having to switch first.
+      const target = button.dataset.workspace
+      const wanted = button.dataset.thread
+      void openDshWorkspace(target).then(opened => {
+        if (!opened) return
+        const thread = state.workspace?.threads.find(item => item.id === wanted)
+        if (thread !== undefined) selectCanvas(thread)
+      }).catch(setError)
+      return
+    }
     if (button.dataset.action === 'select-thread' && thread !== undefined) {
-      state.mapCardSessionSwitches.clear()
-      state.activeId = thread.id
-      state.selectedCardId = null
-      state.inspectorCardId = null
-      state.inspectorOpening = false
-      state.error = ''
-      // Choosing a conversation leaves any new-session canvas behind.
-      if (state.draft?.kind === 'new') state.draft = null
-      if (state.workspace !== null) revealConversationThread(conversationCards(state.workspace.threads), thread.id)
-      // Each canvas is its own coordinate space, so the camera left over from the
-      // previous one framed empty space. Centre on this canvas's cards, the way 定位
-      // does, on the next frame once the new cards are mounted.
-      state.canvasViewInitialized = false
-      render()
-      window.requestAnimationFrame(() => focusActiveCard())
-      void loadThreadHistory(thread)
-      // Bidirectional current-session sync: switch DSH's current session
-      // without closing the map; the client confirms via chattree:current-session.
-      if (thread.dshSessionId !== null) post('chattree:activate-session', { sessionId: thread.dshSessionId })
+      selectCanvas(thread)
+      return
     }
     // The card title and the footer 详情 button open the card inspector, since
     // the full-page thread view is gone.
@@ -3243,24 +3344,6 @@ app.addEventListener('change', event => {
     updateQuickPhrase(Number(quickPhrase.dataset.quickPhraseIndex), quickPhrase.value)
     return
   }
-  const select = event.target.closest('[data-action="select-workspace"]')
-  if (!(select instanceof HTMLSelectElement)) return
-  const choice = workspaceChoices().find(item => item.id === select.value)
-  state.inspectorCardId = null
-  state.inspectorOpening = false
-  if (choice?.source === 'dsh') {
-    // Map → native sync: switching workspaces moves DSH's current session to
-    // the workspace's most recently updated session, keeping both sides in step.
-    void openDshWorkspace(choice.id).then(opened => {
-      if (!opened) return
-      const threads = state.workspace?.threads ?? []
-      const latest = threads
-        .filter(thread => thread.dshSessionId !== null)
-        .sort((a, b) => String(b.updatedAt ?? '').localeCompare(String(a.updatedAt ?? '')))[0]
-      const sessionId = latest?.dshSessionId ?? choice.sessionIds[0]
-      if (sessionId !== undefined) post('chattree:activate-session', { sessionId })
-    }).catch(setError)
-  } else if (choice !== undefined) { state.selectedDshWorkspaceId = null; void openWorkspace(choice.id).catch(setError) }
 })
 app.addEventListener('input', event => {
   const input = event.target

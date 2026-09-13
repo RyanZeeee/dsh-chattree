@@ -31,14 +31,17 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .new-workspace { display: flex; width: calc(100% - 4px); min-height: auto; height: 38px; align-items: center; justify-content: center; gap: 6px; margin: 0 2px 8px; border-color: rgba(0,0,0,.1); border-radius: 12px; background: #fff; padding: 8px 16px; color: #111827; font-size: 14px; font-weight: 500; }
 .new-session-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .new-workspace:hover { border-color: rgba(0,0,0,.16); background: #f7f7f8; color: #111827; }
-.workspace-label, .sidebar-heading { color: #7c8798; font-size: 14px; font-weight: 400; letter-spacing: 0; }
-.workspace-label { display: grid; gap: 9px; margin: 16px 4px 0; }
-.workspace-select { position: relative; display: block; }
-.workspace-select svg { position: absolute; top: 50%; left: 9px; width: 15px; height: 15px; transform: translateY(-50%); fill: none; pointer-events: none; stroke: #64748b; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.4; }
-.workspace-label select { width: 100%; min-height: 33px; border: 1px solid #d8dee8; border-radius: 6px; background: #fff; color: #374151; padding: 0 28px 0 30px; }
-.sidebar-heading { display: flex; align-items: center; justify-content: space-between; margin: 23px 4px 0; padding: 0; }
-.sidebar-heading button { display: grid; width: 24px; min-height: 24px; place-items: center; padding: 0; color: #111827; font-size: 17px; }
-.thread-tree { display: grid; gap: 3px; overflow: auto; padding-bottom: 12px; }
+/* The rail is two levels: a workspace, then the canvases inside it. The workspace row is a
+   folder -- clicking it folds, nothing more -- so it is quieter than the canvas rows it holds. */
+.rail-group { margin: 2px 0; }
+.workspace-row { display: flex; width: 100%; min-width: 0; min-height: 26px; align-items: center; gap: 4px; border: 0; border-radius: 6px; background: transparent; padding: 0 6px; color: #4b5563; font-size: 12px; font-weight: 600; text-align: left; }
+.workspace-row:hover { background: #f3f4f6; }
+.workspace-row.active { color: #111827; }
+.rail-caret { display: grid; width: 14px; height: 14px; flex: none; place-items: center; color: #94a3b8; transition: transform 120ms ease; }
+.rail-caret svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.rail-caret.is-open { transform: rotate(90deg); }
+.rail-workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-tree { display: grid; gap: 3px; margin-left: 10px; overflow: auto; padding-bottom: 6px; }
 .tree-row { display: flex; min-width: 0; align-items: center; gap: 8px; border: 0; background: transparent; color: #4b5563; text-align: left; }
 .tree-row:hover { background: #f3f4f6; }
 .tree-row.active { background: #e5e7eb; color: #111827; font-weight: 650; }
@@ -55,7 +58,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 /* The collapsed rail keeps one icon: the toggle. 新画布 stays a full-width button in the
    open rail, where its label fits, and is hidden here rather than shrunk to a bare +. */
 .sidebar-collapsed .new-workspace { display: none; }
-.sidebar-collapsed .workspace-label, .sidebar-collapsed .sidebar-heading, .sidebar-collapsed .thread-tree { display: none; }
+.sidebar-collapsed .rail-group { display: none; }
 .status-message { position: absolute; z-index: 6; top: 12px; right: 16px; display: flex; align-items: center; gap: 10px; max-width: 400px; padding: 9px 10px 9px 13px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; box-shadow: 0 3px 10px rgba(127,29,29,.12); }
 .status-message span { flex: 1; line-height: 1.5; }
 .status-message button { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #b91c1c; font-size: 15px; line-height: 1; }
@@ -366,9 +369,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 [data-theme="dark"] .sidebar-toggle:hover { background: #26282d; color: #e6e8eb; }
 [data-theme="dark"] .new-workspace { border-color: rgba(255,255,255,.12); background: #1b1c1f; color: #e6e8eb; }
 [data-theme="dark"] .new-workspace:hover { border-color: rgba(255,255,255,.22); background: #222428; color: #fff; }
-[data-theme="dark"] .workspace-label, [data-theme="dark"] .sidebar-heading { color: #8f959e; }
-[data-theme="dark"] .workspace-label select { border-color: #2a2d33; background: #15171b; color: #e6e8eb; }
-[data-theme="dark"] .workspace-select svg { stroke: #8f959e; }
+[data-theme="dark"] .workspace-row { color: #a7adb5; }
+[data-theme="dark"] .workspace-row:hover { background: #26282d; }
+[data-theme="dark"] .workspace-row.active { color: #e6e8eb; }
+[data-theme="dark"] .rail-caret { color: #737a83; }
 [data-theme="dark"] .tree-row { color: #a7adb5; }
 [data-theme="dark"] .tree-row:hover { background: #26282d; }
 [data-theme="dark"] .tree-row.active { background: #2a2d33; color: #e6e8eb; }
@@ -554,7 +558,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
    padding. */
 .sidebar-brand-row { height: calc(60px + var(--ct-rail-shift)); margin-bottom: var(--ct-rail-gap); }
 .sidebar { background: var(--ct-surface-2); border-right-color: var(--ct-border); }
-.sidebar-heading { color: var(--ct-text-3); }
+.workspace-row { color: var(--ct-text-2); }
+.workspace-row:hover { background: var(--ct-surface-3); color: var(--ct-text-1); }
+.workspace-row.active { color: var(--ct-text-1); }
+.rail-caret { color: var(--ct-text-3); }
 .new-workspace { border-color: var(--ct-border); border-radius: var(--ct-radius-tool); background: var(--ct-surface); color: var(--ct-text-1); }
 .new-workspace:hover { border-color: var(--ct-border-strong); background: var(--ct-surface-3); }
 .tree-row { border-radius: var(--ct-radius-tool); color: var(--ct-text-2); }

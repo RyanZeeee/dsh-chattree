@@ -340,3 +340,21 @@ test('a compaction node is the one yellow thing on the canvas', () => {
   has(css, '.dot-node.is-compaction { background: var(--ct-compaction); }', 'the dot canvas marks it too')
   has(css, '.composer-note {', 'the panel note is styled')
 })
+
+test('the rail is two levels: workspaces, and the canvases inside them', () => {
+  has(app, 'function railModel()', 'the rail has a model of its own')
+  has(app, 'data-action="toggle-rail-group"', 'a workspace row folds')
+  has(app, 'data-workspace="${escapeHtml(group.workspace.id)}"', 'a canvas row names the workspace it lives in')
+  has(app, 'selectCanvas(thread)', 'opening a canvas is one shared path, whichever row reached it')
+  has(app, 'RAIL_OPEN_KEY', 'the folded state is remembered')
+  has(app, 'const expanded = active || state.railOpen.has(workspace.id)', 'the active workspace is always open')
+  // The active workspace's threads are already loaded; the others are read when opened, not on
+  // every tick -- and never through the call that reports the canvas's archive set.
+  has(app, 'state.railCache.set(workspace.id, await threadsForDshWorkspace(workspace, { recordArchive: false }))', 'a folded group is not read')
+  has(app, 'async function threadsForDshWorkspace(workspace, { recordArchive = true } = {})', 'the archive side effect can be skipped')
+  has(app, 'if (!recordArchive) return projections.flatMap(projection => projection.workspace.threads', 'and is skipped before it writes')
+  // The dropdown it replaced is gone, along with its handler.
+  assert.ok(!app.includes('select-workspace'), 'the workspace <select> is still wired')
+  assert.ok(!app.includes('sidebar-heading'), 'the flat canvas heading is still rendered')
+  assert.ok(!css.includes('workspace-select'), 'the dropdown styles are still here')
+})
