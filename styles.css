@@ -602,7 +602,11 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
    instead, so its own contents stay centred in it and everything below keeps its
    own spacing. The collapsed rail has no brand row, so it takes the room as
    padding. */
-.sidebar-brand-row { height: calc(60px + var(--ct-rail-shift)); margin-bottom: var(--ct-rail-gap); }
+/* The toggle must not move when the rail folds. The folded rail centres its 36px row from
+   `18px + shift`, so its button sits `shift / 2` lower than this row -- a 100px row centred from
+   6px -- puts it. Top padding is what moves a row's contents without moving the button below it,
+   and half of it lands as movement: one whole shift of padding is exactly the difference. */
+.sidebar-brand-row { height: calc(60px + var(--ct-rail-shift)); margin-bottom: var(--ct-rail-gap); padding: calc(8px + var(--ct-rail-shift)) 0 8px 4px; }
 .sidebar { background: var(--ct-surface-2); border-right-color: var(--ct-border); }
 .workspace-row { color: var(--ct-text-2); }
 .workspace-row:hover { background: var(--ct-surface-3); color: var(--ct-text-1); }

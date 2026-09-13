@@ -504,3 +504,31 @@ test('a full rail scrolls, and its popovers survive the scroll region', () => {
   has(app, '&& state.summaries.length > 0) void loadRailGroup(workspace)', 'a group is read before the list it reads out of')
   has(app, 'if (changed) state.railCache.clear()', 'a changed workspace list leaves every group stale')
 })
+
+test('the manifest declares the compatibility the store reads', () => {
+  // DSH STORE's automatic lane requires both, and reads the DSH matrix out of this block: an
+  // absent one is why the entry was blocked with "DSH compatibility is not explicitly declared".
+  const manifest = JSON.parse(read('package.json'))
+  assert.ok(manifest.engines?.node, 'no Node range declared')
+  assert.equal(manifest.dsh?.compatibility?.dshReleases?.['0.1.5-rc.1'], 'compatible', 'the harness this is built against is not declared compatible')
+  // node-semver only lets a prerelease satisfy a range when some comparator shares its exact
+  // major.minor.patch tuple and carries a prerelease tag, so the range has to name it.
+  assert.ok(manifest.dsh.compatibility.dsh.includes('0.1.5-rc.1'), `the range does not name the prerelease it claims: ${manifest.dsh.compatibility.dsh}`)
+  // The store accepts only these three words.
+  for (const [version, status] of Object.entries(manifest.dsh.compatibility.dshReleases)) {
+    assert.ok(['compatible', 'incompatible', 'unknown'].includes(status), `${version}: ${status}`)
+  }
+  // A bundle patch is what makes the plugin installable at all; `dsh.client` alone is not.
+  assert.ok(manifest.dsh.bundle?.patch, 'the bundle patch declaration is gone')
+})
+
+test('both READMEs state the same permissions and bounds', () => {
+  // The store asks for dependencies, permissions, external services and failure bounds in writing.
+  for (const [path, heading] of [['README.md', '## 权限与边界'], ['docs/en/README.md', '## Permissions and bounds']]) {
+    const text = read(path)
+    has(text, heading, `${path} has no permissions section`)
+    for (const claim of ['workspaces.json', 'trustedHosts', '403']) {
+      has(text, claim, `${path} does not state ${claim}`)
+    }
+  }
+})

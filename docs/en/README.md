@@ -145,6 +145,53 @@ The plugin is not on npm yet, so installing by package name
 - The plugin **does not use the network**: every request goes back to DSH itself
   (`/chattree/api/*`), with no external calls
 
+## Permissions and bounds
+
+DSH STORE inspects the runtime source statically at a fixed commit. The four things it asks for are
+stated here in one place.
+
+**Dependencies**: none at runtime. The host half uses only Node built-ins (`node:fs/promises`,
+`node:crypto`, `node:path`, `node:url`) and imports no `@deepseek-ai/*` package; it talks to DSH
+through service names (`webServer`, `sessions`) and the `remote.*` namespaces. The client half
+(`client.js`) injects `@deepseek-ai/dsh-client-runtime` (`dsh.client.inject`) — supplied by DSH's
+client module loader, not an npm dependency.
+
+**Permissions** — this is the whole list:
+
+| Surface | What it actually does |
+|---|---|
+| Files | Writes exactly one file: `$DSH_HOME/chattree/workspaces.json` (overridable through the profile's `dataFile`, see `cordis.patch.yml`); one `workspaces.json.lock` beside it (a PID lock, released on exit, stale locks reclaimed); and reads its own `app.js` / `styles.css` from its install directory to serve them. It does not read DSH's session files and touches no other path |
+| Network | **Makes no outbound request.** The host half registers same-origin routes (`/chattree/…`) on DSH's own web server and the canvas page calls them by relative path; any `Host` outside the allowlist (`localhost`, `127.0.0.1`, plus whatever a profile adds to `trustedHosts`) gets a 403 |
+| Commands | No subprocess, no shell |
+| Credentials | No secrets read from the environment, no token held |
+
+**External services**: none. No third-party host, no telemetry, no model call of its own — every
+model call happens inside the DSH session you are already using.
+
+**Failure bounds**:
+
+- Data file missing → an empty graph is created; your sessions are untouched
+- Data file corrupt or unreadable → the read is refused and **the path is reported**; your data is
+  not silently overwritten. Canvas requests fail, DSH itself keeps running — mounting the plugin
+  does not depend on that read
+- Two instances at once → the PID lock stops them overwriting each other; a lock whose owner is gone
+  is reclaimed, with one warning on stderr
+- An optional DSH interface missing (model catalogue, command list) → those buttons stay out of the
+  composer and say why in the menu; everything else works
+- One unreadable session history → a warning is logged and that session is skipped; live projection
+  is unaffected
+- Uninstall → the routes go with it; `workspaces.json` is left in place (delete it to remove it)
+
+**To check it yourself** (in a disposable profile, leaving your own alone):
+
+```bash
+dsh --profile chattree-check --from-default-profile web                  # disposable profile
+dsh plugin --profile chattree-check add github:RyanZeeee/dsh-chattree    # install
+dsh --profile chattree-check                                             # start: Chat Tree appears
+dsh plugin --profile chattree-check remove dsh-chattree                  # uninstall
+rm -rf ~/.dsh/profiles/chattree-check                                    # remove every trace
+```
+
 ## Requirements
 
 - DeepSeek Harness 2.0.9 or newer

@@ -125,6 +125,42 @@ pnpm run build   # 三个 JS 文件的语法检查
 - **对话内容仍然由 DSH 保存**，插件不改动、不复制会话记录
 - 插件**不联网**：所有请求都是发回 DSH 本体的本地接口（`/chattree/api/*`），没有任何外部请求
 
+## 权限与边界
+
+DSH 插件市场（DSH STORE）会按固定 Commit 静态检查运行时代码。它要求的四项在这里一次说清。
+
+**依赖**：零运行时依赖。宿主侧只用 Node 内置模块（`node:fs/promises`、`node:crypto`、`node:path`、`node:url`），不 import 任何 `@deepseek-ai/*` 包；与 DSH 的交互靠服务名（`webServer`、`sessions`）和 `remote.*` 命名空间。前端半体（`client.js`）注入 `@deepseek-ai/dsh-client-runtime`（`dsh.client.inject`，由 DSH 的客户端模块加载器提供，不是 npm 依赖）。
+
+**权限** —— 下面就是全部：
+
+| 面 | 实际做了什么 |
+|---|---|
+| 文件 | 只写一个文件：`$DSH_HOME/chattree/workspaces.json`（路径可由 profile 的 `dataFile` 覆盖，见 `cordis.patch.yml`）；同目录一个 `workspaces.json.lock`（PID 锁，进程退出即释放，过期锁自动回收）；读取自己安装目录下的 `app.js` / `styles.css` 用于提供服务。不读 DSH 的会话文件，不碰任何其他路径 |
+| 网络 | **不发起任何对外请求**。宿主侧在 DSH 自己的 web server 上注册同源路由（`/chattree/…`），画布页面用相对路径访问它们；`Host` 不在白名单（`localhost`、`127.0.0.1`，加上 profile 里 `trustedHosts` 的附加项）一律返回 403 |
+| 命令 | 不启动子进程，不执行 shell |
+| 凭据 | 不读环境变量里的密钥，不持有任何令牌 |
+
+**外部服务**：无。没有第三方主机、没有遥测、没有自己的模型调用——所有模型调用都发生在你正在用的那个 DSH 会话里。
+
+**失败边界**：
+
+- 数据文件不存在 → 建一个空图；你的会话本身不受影响
+- 数据文件损坏或读不出来 → 拒绝读取并**报出具体路径**，不静默覆盖你的数据。画布相关请求会失败，DSH 本身照常运行——插件挂载不依赖这次读取
+- 同时运行两个实例 → PID 锁阻止互相覆盖；锁的持有者已消失时自动回收，并在 stderr 打印一条警告
+- DSH 没提供某个可选接口（模型目录、命令列表等）→ 对应按钮不出现在输入区，其余照常，并在菜单里写明原因
+- 某条会话历史读不出来 → 记一条警告并跳过该条，实时投影不受影响
+- 卸载 → 路由随之消失；`workspaces.json` 保留（想彻底清掉就删掉那个文件）
+
+**想自己验一遍**（用一次性 profile，不碰你日常那份）：
+
+```bash
+dsh --profile chattree-check --from-default-profile web                  # 造一个一次性 profile
+dsh plugin --profile chattree-check add github:RyanZeeee/dsh-chattree    # 装
+dsh --profile chattree-check                                             # 启：顶部应出现 Chat Tree
+dsh plugin --profile chattree-check remove dsh-chattree                  # 卸
+rm -rf ~/.dsh/profiles/chattree-check                                    # 删干净
+```
+
 ## 环境要求
 
 - DeepSeek Harness 2.0.9 或更高
