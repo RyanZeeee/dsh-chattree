@@ -46,15 +46,6 @@ export class WorkspaceStore {
     return structuredClone(workspace)
   }
 
-  async create(title) {
-    return this.mutate(() => {
-      const now = new Date().toISOString()
-      const workspace = { id: randomUUID(), title: requiredText(title, MAX_TITLE_LENGTH, 'title'), createdAt: now, updatedAt: now, threads: [] }
-      this.state.workspaces.unshift(workspace)
-      return this.summary(workspace)
-    })
-  }
-
   async createThread(workspaceId, input) {
     return this.mutate(() => {
       const workspace = this.workspace(workspaceId)
@@ -967,10 +958,9 @@ export function apply(ctx, config) {
       if (!trustedHosts.has(hostname)) return sendJson(res, 403, { error: '不被信任的 Host' })
       const path = new URL(req.url ?? '/', 'http://dsh.local').pathname
       if (path === '/chattree/api/reset' && req.method === 'POST') return sendJson(res, 200, await store.clearLegacy(ctx.sessions.list()))
-      if (path === '/chattree/api/workspaces') {
-        if (req.method === 'GET') return sendJson(res, 200, { workspaces: await store.list() })
-        if (req.method === 'POST') return sendJson(res, 201, { workspace: await store.create((await readJson(req)).title) })
-      }
+      // Read-only: a workspace is DSH's registration, made through DSH's own chooser, so this
+      // list is what the rail groups by rather than something the canvas creates.
+      if (path === '/chattree/api/workspaces' && req.method === 'GET') return sendJson(res, 200, { workspaces: await store.list() })
       const workspace = /^\/chattree\/api\/workspaces\/([0-9a-f-]+)$/i.exec(path)
       if (workspace !== null) {
         if (req.method === 'GET') return sendJson(res, 200, { workspace: await store.get(workspace[1]) })

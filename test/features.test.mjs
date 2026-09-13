@@ -400,3 +400,25 @@ test('the rail can add a workspace, and a new canvas asks which one', () => {
   has(app, 'draft.workspaceId ?? state.selectedDshWorkspaceId', 'the draft decides where the canvas goes')
   has(app, 'draft.cwd ?? state.currentDsh?.cwd', 'and which directory it uses')
 })
+
+test('the rail offers DSH workspaces, and only DSH workspaces', () => {
+  // The store's own workspace records are an internal grouping the canvas is loaded through --
+  // nothing ever created one -- so the code that offered them as a choice is gone, and the list
+  // route is read-only.
+  assert.ok(!app.includes('function workspaceChoices'), 'the workspace picker is back')
+  assert.ok(!app.includes("source: 'projection'"), 'the store-owned fallback is back')
+  assert.ok(!/(^|[^A-Za-z])openWorkspace\(/m.test(app), 'the store-owned workspace loader is back')
+  has(app, 'state.dshWorkspaces.map(workspace => {', 'the rail reads DSH\'s own list')
+  assert.ok(!host.includes('async create(title)'), 'store.create is back')
+  assert.ok(!host.includes('store.create('), 'the workspace-create route is back')
+  has(host, "if (path === '/chattree/api/workspaces' && req.method === 'GET')", 'the list route stays read-only')
+})
+
+test('a question is only ever sent down the branch path', () => {
+  // Every question forks a new session, so a plain send had no caller at all: the panel and the
+  // draft card both go through branchOff.
+  assert.ok(!app.includes('async function sendMessage'), 'the unused send is back')
+  has(app, 'async function branchOff(', 'the branch path is what sends')
+  has(app, 'await branchOff(parent, draft.atSeq, draft.anchorId, text, branchPosition)', 'the draft card sends through it')
+  has(app, 'await branchOff(thread, atSeq, card.id, text, position)', 'and so does the panel')
+})

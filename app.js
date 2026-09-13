@@ -276,11 +276,6 @@ function currentDshThread(threads = state.workspace?.threads ?? []) {
 // DSH's synthesised catch-all workspace, which is never offered as a choice.
 const UNGROUPED_WORKSPACE_ID = 'dsh-ungrouped'
 
-function workspaceChoices() {
-  if (state.dshWorkspaces.length > 0) return state.dshWorkspaces.map(workspace => ({ ...workspace, source: 'dsh' }))
-  return state.summaries.map(workspace => ({ id: workspace.id, title: workspace.title, path: workspace.cwd, sessionIds: [], source: 'projection' }))
-}
-
 // ---------------------------------------------------------------------------
 // The rail: workspaces, and the canvases that live in them
 //
@@ -299,7 +294,7 @@ function workspaceChoices() {
 // its own load -- guarded by railLoading so a failing read cannot become a render loop.
 function railModel() {
   const activeWorkspaceId = state.selectedDshWorkspaceId
-  return workspaceChoices().map(workspace => {
+  return state.dshWorkspaces.map(workspace => {
     const active = workspace.id === activeWorkspaceId
     const ownThreads = state.workspace !== null && state.workspace.id === `dsh:${workspace.id}` ? state.workspace.threads : null
     const expanded = active || state.railOpen.has(workspace.id)
@@ -403,26 +398,10 @@ async function refreshSummaries({ renderAfter = true } = {}) {
   const body = await api('/chattree/api/workspaces')
   state.summaries = body.workspaces
   const changed = before !== JSON.stringify(state.summaries)
-  const current = state.workspace?.id
-  if (state.selectedDshWorkspaceId === null && current !== null && !state.summaries.some(item => item.id === current)) state.workspace = null
   const selected = selectedDshWorkspace()
   if (selected !== undefined && (changed || state.workspace === null)) await openDshWorkspace(selected.id, { renderAfter })
-  else if (state.workspace === null && state.summaries.length > 0) await openWorkspace(state.summaries[0].id)
   else if (renderAfter && changed && canReplaceView()) render()
   return changed
-}
-
-async function openWorkspace(id, { renderAfter = true, preserveCanvasCamera = false } = {}) {
-  const load = ++state.workspaceLoad
-  const body = await api(`/chattree/api/workspaces/${id}`)
-  if (load !== state.workspaceLoad) return
-  if (state.workspace?.id !== body.workspace.id && !preserveCanvasCamera) resetCanvasCamera()
-  state.workspace = body.workspace
-  rememberArchiveRoots(body.workspace.id, body.workspace.archivedCardIds)
-  state.activeId = state.workspace.threads.some(thread => thread.id === state.activeId) ? state.activeId : state.workspace.threads[0]?.id ?? null
-  if (renderAfter && canReplaceView()) render()
-  await Promise.all(state.workspace.threads.map(thread => loadThreadHistory(thread, false)))
-  if (renderAfter && load === state.workspaceLoad && canReplaceView()) render()
 }
 
 async function refreshProjection() {
@@ -431,7 +410,6 @@ async function refreshProjection() {
   // A refresh is not a workspace switch: it must never re-frame the canvas the user is
   // working in, even if the projection reports a different workspace for a moment.
   if (state.selectedDshWorkspaceId !== null) await openDshWorkspace(state.selectedDshWorkspaceId, { preserveCanvasCamera: true })
-  else await openWorkspace(state.workspace.id, { preserveCanvasCamera: true })
   return true
 }
 
@@ -586,28 +564,6 @@ function carryOutPendingFocus() {
     state.inspectorCardId = newest.id
     state.inspectorOpening = false
     state.inspectorFollow = true
-  }
-}
-
-async function sendMessage(thread, text) {
-  if (thread.dshSessionId === null) throw new Error('该节点没有关联的 DSH 会话')
-  if (state.pendingReplies.has(thread.dshSessionId)) throw new Error('该会话正在回复，请稍后再发送')
-  state.pendingReplies.set(thread.dshSessionId, { text, at: Date.now() })
-  // The panel joins the line before anything renders, so the new turn and the
-  // streaming reply replace the old view in one step instead of two.
-  handPanelToLine(thread.id)
-  state.error = ''
-  render()
-  try {
-    const parts = pendingParts
-    await dshRpc('chattree:send-message', { sessionId: thread.dshSessionId, text, parts })
-    pendingParts = []
-    requestFocusNewest(thread.id)
-    void loadThreadHistory(thread)
-  } catch (error) {
-    state.pendingReplies.delete(thread.dshSessionId)
-    render()
-    throw error
   }
 }
 
@@ -1739,7 +1695,7 @@ function commitRailRename() {
 // is read again rather than guessed at. A renamed workspace does not need this: the bridge pushes
 // DSH's own list, and the rail renders that.
 async function reloadRailGroup(workspaceId) {
-  const workspace = workspaceChoices().find(item => item.id === workspaceId)
+  const workspace = state.dshWorkspaces.find(item => item.id === workspaceId)
   if (workspace === undefined) return
   try {
     state.railCache.delete(workspaceId)
@@ -2722,7 +2678,6 @@ function render() {
   // question only floats on its own when there is no panel to hold it.
   const inspectorModel = inspectorPanelModel()
   state.inspectorRendered = inspectorModel !== null
-  const choices = workspaceChoices()
   const selectedWorkspaceId = state.selectedDshWorkspaceId ?? workspace?.id
   const rail = railModel()
   const canvasControls = state.mode === 'canvas' && (threads.length > 0 || state.draft?.kind === 'new') ? `<div class="canvas-controls"><button data-action="layout" aria-label="整理" data-label="整理"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/></svg></button><button data-action="focus-active" aria-label="定位" data-label="定位"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v2.6M8 11.9v2.6M1.5 8h2.6M11.9 8h2.6"/></svg></button><button data-action="zoom-in" aria-label="放大" data-label="放大"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg></button><span>${Math.round(state.zoom * 100)}%</span><button data-action="zoom-out" aria-label="缩小" data-label="缩小"><svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3.5 8h9"/></svg></button><button data-action="toggle-canvas-style" aria-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" data-label="${state.canvasStyle === 'dot' ? '卡片模式' : '圆点模式'}" aria-pressed="${state.canvasStyle === 'dot' ? 'true' : 'false'}"><svg aria-hidden="true" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="1.6"/><circle cx="12" cy="4" r="1.6"/><circle cx="8" cy="8" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/></svg></button></div>` : ''
@@ -3336,7 +3291,7 @@ app.addEventListener('click', async event => {
       const id = button.dataset.workspace
       if (id === undefined) return
       state.railChooser = false
-      const choice = workspaceChoices().find(item => item.id === id)
+      const choice = state.dshWorkspaces.find(item => item.id === id)
       // The catch-all has no directory of its own, so it falls back to the current session's.
       if (id === UNGROUPED_WORKSPACE_ID) openNewSession()
       else openNewSession(id, choice?.path)
