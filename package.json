@@ -1,6 +1,6 @@
 {
   "name": "dsh-chattree",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "A visual, non-linear conversation canvas for DeepSeek Harness (DSH) — every turn is a node, every question grows a branch. DSH 插件：把线性聊天记录变成一张可以看、可以点的对话地图。",
   "author": "RyanZeeee",
   "type": "module",

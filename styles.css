@@ -43,8 +43,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .rail-workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The row's "more" rides over its own right edge: the row is a button, so this cannot be inside it.
    It only appears for the row the pointer is on, or the one whose box is open. */
-.rail-group, .tree-item { position: relative; }
-.rail-more { position: absolute; z-index: 2; top: 3px; right: 2px; display: grid; width: 20px; height: 20px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: #94a3b8; cursor: pointer; opacity: 0; }
+/* Each row is its own positioning context, so the "more" can be centred on the row rather than
+   on the group (which also holds the canvas list below it). */
+.rail-workspace, .tree-item { position: relative; }
+.rail-more { position: absolute; z-index: 2; top: 50%; right: 2px; transform: translateY(-50%); display: grid; width: 20px; height: 20px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: #94a3b8; cursor: pointer; opacity: 0; }
 .rail-more svg { width: 12px; height: 12px; }
 .workspace-row:hover + .rail-more, .rail-more:focus-visible, .tree-item:hover .rail-more, .rail-more:hover { opacity: 1; }
 .rail-more:hover { background: #e5e7eb; color: #111827; }
@@ -58,7 +60,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .rail-add:hover { background: #e5e7eb; color: #111827; }
 .rail-add svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.6; }
 /* A popover for one row, or for the workspace a new canvas goes in. */
-.rail-menu { position: absolute; z-index: 30; top: 26px; right: 4px; min-width: 132px; max-width: calc(100% - 8px); border: 1px solid var(--ct-border, #e3e8ef); border-radius: 10px; background: var(--ct-surface, #fff); padding: 4px; box-shadow: 0 8px 22px rgba(15,23,42,.16); }
+.rail-menu { position: absolute; z-index: 30; top: calc(100% + 2px); right: 4px; min-width: 132px; max-width: calc(100% - 8px); border: 1px solid var(--ct-border, #e3e8ef); border-radius: 10px; background: var(--ct-surface, #fff); padding: 4px; box-shadow: 0 8px 22px rgba(15,23,42,.16); }
 /* The chooser belongs to the button that opens it, so it is positioned against that button
    rather than against the rail: both an absolute box and an absolutely positioned ancestor have
    to be named, or `top`/`left` resolve against the viewport and the popover lands in the corner
@@ -86,7 +88,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 /* The collapsed rail keeps one icon: the toggle. 新画布 stays a full-width button in the
    open rail, where its label fits, and is hidden here rather than shrunk to a bare +. */
 .sidebar-collapsed .new-workspace { display: none; }
-.sidebar-collapsed .rail-group { display: none; }
+.sidebar-collapsed .rail-group, .sidebar-collapsed .rail-head { display: none; }
 .status-message { position: absolute; z-index: 6; top: 12px; right: 16px; display: flex; align-items: center; gap: 10px; max-width: 400px; padding: 9px 10px 9px 13px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; font-size: 12px; box-shadow: 0 3px 10px rgba(127,29,29,.12); }
 .status-message span { flex: 1; line-height: 1.5; }
 .status-message button { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: #b91c1c; font-size: 15px; line-height: 1; }
@@ -441,10 +443,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
   --ct-accent-ink: #2563eb;
   --ct-accent-soft: #eef4ff;
   /* The one colour nothing else on the canvas uses: a compaction node. */
-  --ct-compaction: #d99a00;
-  --ct-compaction-ink: #8a6200;
-  --ct-compaction-soft: #fff6e0;
-  --ct-compaction-border: #e8c069;
+  --ct-compaction: #2f9e44;
+  --ct-compaction-ink: #1f6f31;
+  --ct-compaction-soft: #e9f8ee;
+  --ct-compaction-border: #93d3a6;
   --ct-radius-card: 12px;
   --ct-radius-bubble: 12px;
   --ct-radius-tool: 8px;
@@ -469,10 +471,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
   --ct-accent: #5b8def;
   --ct-accent-ink: #7ea6f5;
   --ct-accent-soft: #1d2733;
-  --ct-compaction: #e8b53f;
-  --ct-compaction-ink: #f0cb74;
-  --ct-compaction-soft: #2e2610;
-  --ct-compaction-border: #6b5a24;
+  --ct-compaction: #57c877;
+  --ct-compaction-ink: #96e0ab;
+  --ct-compaction-soft: #14301d;
+  --ct-compaction-border: #2f6741;
   --ct-shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 12px 26px -18px rgba(0,0,0,.75);
   --ct-shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 20px 36px -20px rgba(0,0,0,.8);
   --ct-shadow-panel: -20px 0 44px -30px rgba(0,0,0,.75);
@@ -549,7 +551,6 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .chat-bubble-compaction { border-left: 3px solid var(--ct-compaction); background: var(--ct-compaction-soft); border-radius: var(--ct-radius-bubble); padding: 10px 12px; }
 .chat-bubble-compaction strong { display: block; margin-bottom: 4px; color: var(--ct-compaction-ink); font-size: 11px; font-weight: 650; letter-spacing: .02em; }
 .chat-bubble-compaction p { margin: 0; }
-.composer-note { margin: 0; padding: 12px var(--ct-panel-pad); color: var(--ct-text-3); font-size: 12px; line-height: 1.7; }
 .card-failure {
   display: flex; gap: 9px; margin: 12px 0 0; padding: 11px 12px;
   border: 1px solid #f6d5d5; border-radius: 10px; background: #fef2f2;

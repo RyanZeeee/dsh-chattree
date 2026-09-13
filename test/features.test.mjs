@@ -330,18 +330,25 @@ test('a compaction checkpoint is a node of its own, never a question', () => {
   has(app, "if (reply.kind === 'user' || reply.kind === 'compaction') break", 'and is never swallowed as a reply')
   has(app, 'latestTurn.compaction !== true &&', 'a stream is never painted onto the marker')
   has(app, "const heading = card.compaction === true ? '上下文已压缩' : card.question", 'the card is headed by the label, not by the summary twice')
-  has(app, 'if (card.compaction === true) {', 'the panel answers with a note instead of a dead input')
-  has(app, 'composer-note', 'and that note exists')
+  // A checkpoint is where the conversation continues from -- the next turn is seeded from it --
+  // so it takes the ordinary composer. It used to be refused here on the grounds that nothing
+  // answers it, which had it exactly backwards.
+  has(app, 'const usable = Number.isInteger(card.forkSeq)', 'a checkpoint takes the ordinary composer')
+  has(app, 'function lastTurnSeqBefore(messages, index)', 'and a cut of its own')
+  has(app, 'const forkSeq = compaction ? lastTurnSeqBefore(messages, messageIndex) : answer?.sourceSeq', 'which is the turn before it, not the checkpoint')
+  assert.ok(!app.includes('composer-note'), 'the dead-end note is back')
 })
 
-test('a compaction node is the one yellow thing on the canvas', () => {
-  has(css, '--ct-compaction: #d99a00;', 'a light-theme amber')
-  has(css, '--ct-compaction: #e8b53f;', 'and a dark-theme one')
+test('a compaction node is the one green thing on the canvas', () => {
+  // Green, not yellow: the node marks where the conversation carries on from, with the summary as
+  // the opening of whatever comes next. Yellow read as a warning about a dead end.
+  has(css, '--ct-compaction: #2f9e44;', 'a light-theme green')
+  has(css, '--ct-compaction: #57c877;', 'and a dark-theme one')
+  assert.ok(!css.includes('#d99a00') && !css.includes('#e8b53f'), 'the amber face is back')
   has(css, '.thread-card.is-compaction {', 'the card is marked')
   has(css, '.thread-card.is-compaction .thread-card-head {', 'its header is tinted')
   has(css, '.thread-card.is-compaction .topic-dot { background: var(--ct-compaction); }', 'and so is its dot')
   has(css, '.dot-node.is-compaction { background: var(--ct-compaction); }', 'the dot canvas marks it too')
-  has(css, '.composer-note {', 'the panel note is styled')
 })
 
 test('the rail is two levels: workspaces, and the canvases inside them', () => {
@@ -408,7 +415,7 @@ test('the rail offers DSH workspaces, and only DSH workspaces', () => {
   assert.ok(!app.includes('function workspaceChoices'), 'the workspace picker is back')
   assert.ok(!app.includes("source: 'projection'"), 'the store-owned fallback is back')
   assert.ok(!/(^|[^A-Za-z])openWorkspace\(/m.test(app), 'the store-owned workspace loader is back')
-  has(app, 'state.dshWorkspaces.map(workspace => {', 'the rail reads DSH\'s own list')
+  has(app, 'state.dshWorkspaces.filter(workspace => workspace.id !== UNGROUPED_WORKSPACE_ID || workspace.sessionIds.length > 0)', 'the rail reads DSH\'s own list, minus an empty catch-all')
   assert.ok(!host.includes('async create(title)'), 'store.create is back')
   assert.ok(!host.includes('store.create('), 'the workspace-create route is back')
   has(host, "if (path === '/chattree/api/workspaces' && req.method === 'GET')", 'the list route stays read-only')
@@ -420,7 +427,7 @@ test('a question is only ever sent down the branch path', () => {
   assert.ok(!app.includes('async function sendMessage'), 'the unused send is back')
   has(app, 'async function branchOff(', 'the branch path is what sends')
   has(app, 'await branchOff(parent, draft.atSeq, draft.anchorId, text, branchPosition)', 'the draft card sends through it')
-  has(app, 'await branchOff(thread, atSeq, card.id, text, position)', 'and so does the panel')
+  has(app, 'await branchOff(thread, atSeq, card.id, text, position, card.compaction === true ? card.sourceSeq + 1 : atSeq)', 'and so does the panel')
 })
 
 test('every rail popover is anchored to the box it belongs to', () => {
@@ -431,7 +438,8 @@ test('every rail popover is anchored to the box it belongs to', () => {
   // is locked here.
   has(css, '.sidebar { position: relative;', 'the rail is not a positioning context')
   has(css, '.rail-new { position: relative; }', 'the new-canvas button is not one either')
-  has(css, '.rail-group, .tree-item { position: relative; }', 'the rows are not positioning contexts')
+  has(css, '.rail-workspace, .tree-item { position: relative; }', 'the rows are not positioning contexts')
+  has(css, '.rail-more { position: absolute; z-index: 2; top: 50%; right: 2px; transform: translateY(-50%);', 'the row button is not centred on the row')
   has(css, '.rail-chooser { top: calc(100% + 6px);', 'the chooser does not hang off the button')
   has(app, '<div class="rail-new">', 'the chooser is not rendered beside its button')
 })
@@ -459,4 +467,19 @@ test('every DSH namespace call is read out of its envelope', () => {
     assert.notEqual(at, -1, `missing ${call}`)
     assert.ok(client.slice(at, at + 400).includes(check), `${call} does not check its envelope`)
   }
+})
+
+test('the dot face opens at its own distance, and the canvas follows it there', () => {
+  // The two faces are read at different distances -- cards have to be legible, a dot graph is
+  // taken in at a glance -- so they do not share a zoom. 10% is both how far out the dots may be
+  // zoomed and where they open.
+  has(app, 'const ZOOM_MIN_DOT = .1', 'the dot floor moved')
+  has(app, "zoom: savedCanvasStyle === 'dot' ? ZOOM_MIN_DOT : 1", 'a saved dot face opens at card distance')
+  has(app, "state.zoom = next === 'dot' ? ZOOM_MIN_DOT : clampZoom(state.cardZoom)", 'switching to the dots no longer opens at 10%')
+  has(app, "if (next === 'dot') state.cardZoom = state.zoom", 'the card distance is not kept for the way back')
+  // Setting the distance is only half of it: a camera offset calibrated for legible cards puts the
+  // graph above the viewport once the canvas is read at 10%, so the view is re-anchored as well.
+  has(app, "if (resized && state.mode === 'canvas') window.requestAnimationFrame(() => focusActiveCard())", 'the canvas is not re-anchored after a style change')
+  // The constants are read while the initial state is built, so they must be declared before it.
+  assert.ok(app.indexOf('const ZOOM_MIN_DOT') < app.indexOf('zoom: savedCanvasStyle'), 'the zoom constants are declared after the state that reads them')
 })

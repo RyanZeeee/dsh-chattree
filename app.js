@@ -38,6 +38,14 @@ const savedCanvasStyle = (() => {
   try { return localStorage.getItem(CANVAS_STYLE_KEY) === 'dot' ? 'dot' : 'card' } catch { return 'card' }
 })()
 
+// The card canvas has to be legible; the dot graph carries no text and is taken in at a glance,
+// so it lives much further out. `ZOOM_MIN_DOT` is both how far out it may be zoomed and where it
+// opens -- switching to it shows the whole shape rather than the corner you were reading.
+const ZOOM_MIN = .6
+const ZOOM_MIN_DOT = .1
+const ZOOM_MAX = 4
+const ZOOM_STEP = 1.25               // the +/- buttons step by ratio, not offset
+
 const savedQuickPhrases = (() => {
   try {
     const stored = localStorage.getItem(QUICK_PHRASES_KEY)
@@ -96,7 +104,7 @@ const CAMERA_INSET_Y = 56
 // so panning never flashes empty space.
 const VIEWPORT_MARGIN = 1400
 const state = {
-  summaries: [], workspace: null, activeId: null, selectedCardId: null, mode: 'canvas', zoom: 1, currentDsh: null, sidebarCollapsed: false,
+  summaries: [], workspace: null, activeId: null, selectedCardId: null, mode: 'canvas', zoom: savedCanvasStyle === 'dot' ? ZOOM_MIN_DOT : 1, cardZoom: 1, currentDsh: null, sidebarCollapsed: false,
   dshWorkspaces: [], selectedDshWorkspaceId: null,
   historyBySession: new Map(), historyRequests: new Map(), pendingReplies: new Map(), pendingRpc: new Map(), liveReplies: new Map(),
   draft: null, error: '', workspaceLoad: 0, branchAnchors: new Map(savedBranchAnchors), cardPositions: new Map(savedCardPositions), cardPositionsResetAt: 0, collapsedCardIds: new Set(savedCollapsedCards), quickPhrases: savedQuickPhrases, quickPhraseEditorOpen: false, canvasStyle: savedCanvasStyle,
@@ -294,7 +302,7 @@ const UNGROUPED_WORKSPACE_ID = 'dsh-ungrouped'
 // its own load -- guarded by railLoading so a failing read cannot become a render loop.
 function railModel() {
   const activeWorkspaceId = state.selectedDshWorkspaceId
-  return state.dshWorkspaces.map(workspace => {
+  return state.dshWorkspaces.filter(workspace => workspace.id !== UNGROUPED_WORKSPACE_ID || workspace.sessionIds.length > 0).map(workspace => {
     const active = workspace.id === activeWorkspaceId
     const ownThreads = state.workspace !== null && state.workspace.id === `dsh:${workspace.id}` ? state.workspace.threads : null
     const expanded = active || state.railOpen.has(workspace.id)
@@ -571,11 +579,11 @@ function carryOutPendingFocus() {
 // message. Shared by the canvas draft card and the card inspector, so the branch
 // anchor -- the thing that keeps a branch hung off the node it was cut from --
 // is resolved in exactly one place.
-async function branchOff(parent, atSeq, anchorId, text, position) {
+async function branchOff(parent, atSeq, anchorId, text, position, seedLength = atSeq) {
   const session = await dshRpc('chattree:fork-session', { sessionId: parent.dshSessionId, atSeq })
   const resolvedAnchor = anchorId ?? branchAnchorCardId(parent.id, atSeq)
   if (resolvedAnchor !== undefined) rememberBranchAnchor(session.id, resolvedAnchor)
-  const result = await api(`/chattree/api/threads/${parent.id}/branch`, { method: 'POST', body: JSON.stringify({ title: text.slice(0, 42), dshSessionId: session.id, dshSessionTitle: session.title, position, sourceSeedLength: atSeq, anchorCardId: resolvedAnchor }) })
+  const result = await api(`/chattree/api/threads/${parent.id}/branch`, { method: 'POST', body: JSON.stringify({ title: text.slice(0, 42), dshSessionId: session.id, dshSessionTitle: session.title, position, sourceSeedLength: seedLength, anchorCardId: resolvedAnchor }) })
   if (state.workspace !== null && !state.workspace.threads.some(thread => thread.id === result.thread.id || thread.dshSessionId === result.thread.dshSessionId)) state.workspace.threads.push(result.thread)
   state.activeId = result.thread.id
   state.draft = null
@@ -686,7 +694,11 @@ function checkpointSummary(text) {
 function threadMessages(thread) {
   return persistedMessagesFor(thread).flatMap(message => {
     if (isRuntimeSnapshot(message)) return []
-    if (isCheckpoint(message)) return [{ ...message, kind: 'compaction', text: checkpointSummary(message.text) }]
+    // A checkpoint reaches here either way round: the host writes one already stripped and
+    // labelled, while anything written before that rule is a plain user message whose text still
+    // carries the preamble and the fence. The text is what says which, so both are read the same
+    // way -- and a summary that still has its fence loses it either way.
+    if (isCheckpoint(message) || message?.kind === 'compaction') return [{ ...message, kind: 'compaction', text: checkpointSummary(message.text) }]
     return [message]
   })
 }
@@ -722,6 +734,16 @@ function messagesFor(thread) {
 }
 
 function latestMessage(thread, kind) { return [...messagesFor(thread)].reverse().find(message => message.kind === kind) }
+// The last message seq that sits inside a turn, looking back from `index`. This is the cut a
+// fork from the turn at `index` has to use when that turn has no answer of its own.
+function lastTurnSeqBefore(messages, index) {
+  for (let at = index - 1; at >= 0; at--) {
+    const message = messages[at]
+    if (Number.isInteger(message.sourceSeq)) return message.sourceSeq
+  }
+  return undefined
+}
+
 function questionFor(thread) { return latestMessage(thread, 'user')?.text ?? thread.dshSessionTitle ?? '等待用户提问' }
 function answerFor(thread) { return latestMessage(thread, 'assistant') ?? null }
 
@@ -1013,6 +1035,13 @@ function conversationCards(threads) {
       }
       const answer = compaction ? null : replies.at(-1) ?? null
       const error = compaction ? null : errors.at(-1) ?? null
+      // Where a continuation from this turn is cut. An ordinary turn forks at its answer; a
+      // checkpoint has none, and cannot fork at its own sequence either -- DSH resolves a fork at
+      // the first turn boundary at or after the sequence it is given, and a checkpoint is written
+      // between turns, so that would take the *next* turn with it (or find no boundary at all and
+      // refuse). The cut therefore belongs to the turn before it: the seed then ends just past the
+      // checkpoint, and the child's surface opens on the summary.
+      const forkSeq = compaction ? lastTurnSeqBefore(messages, messageIndex) : answer?.sourceSeq
       const turnIndex = turns.length
       const previous = turns.at(-1)
       // One identity per turn, and it is the turn's position in its thread. It used to be
@@ -1043,6 +1072,7 @@ function conversationCards(threads) {
         error,
         processCount,
         compaction,
+        forkSeq,
       })
     }
     const liveReply = state.liveReplies.get(thread.dshSessionId)
@@ -1323,12 +1353,17 @@ function dotNode(card) {
   return `<button type="button" class="${classes}" data-dot-card="${escapeHtml(card.id)}" data-card-id="${escapeHtml(card.id)}" data-thread="${card.dshThreadId}" data-question="${escapeHtml(card.question)}" aria-label="${escapeHtml(card.question)}" style="left:${left}px;top:${top}px"></button>`
 }
 
+// The two faces are read at different distances, so they do not share a zoom. The dot graph opens
+// at its own floor -- 10%, the whole shape at a glance -- while the card canvas is put back where
+// it was left, because a peek at the dots should not cost the reader their place.
 function setCanvasStyle(style) {
-  state.canvasStyle = style === 'dot' ? 'dot' : 'card'
+  const next = style === 'dot' ? 'dot' : 'card'
+  if (next === state.canvasStyle) return false
+  if (next === 'dot') state.cardZoom = state.zoom
+  state.canvasStyle = next
   try { localStorage.setItem(CANVAS_STYLE_KEY, state.canvasStyle) } catch { /* Private browsing may disable local storage. */ }
-  // Cards need more room than dots do, so stepping back up may be required: 20% is a fine
-  // dot graph and an unreadable card canvas.
-  if (state.zoom < zoomFloor()) state.zoom = zoomFloor()
+  state.zoom = next === 'dot' ? ZOOM_MIN_DOT : clampZoom(state.cardZoom)
+  return true
 }
 
 // One tooltip for the whole graph, positioned on hover and fed from data-question, so a
@@ -1630,7 +1665,10 @@ function railMenuHtml(menu) {
 // rather than inferred from whatever happened to be selected last.
 function railChooserHtml(rail) {
   const rows = rail.map(group => `<button type="button" class="rail-menu-row" role="menuitem" data-action="choose-canvas-workspace" data-workspace="${escapeHtml(group.workspace.id)}" title="${escapeHtml(group.workspace.path ?? group.workspace.title)}">${escapeHtml(group.workspace.title)}</button>`).join('')
-  return `<div class="rail-menu rail-chooser" role="menu"><p class="rail-menu-title">在哪个工作区新建画布</p>${rows || '<p class="rail-menu-title">暂未同步工作区</p>'}</div>`
+  // No workspace to pick is not the same as no canvas to make: without one the canvas falls back
+  // to the current session's directory, which is what the catch-all means here.
+  const fallback = `<button type="button" class="rail-menu-row" role="menuitem" data-action="choose-canvas-workspace" data-workspace="${UNGROUPED_WORKSPACE_ID}">未分组（用当前会话的目录）</button>`
+  return `<div class="rail-menu rail-chooser" role="menu"><p class="rail-menu-title">在哪个工作区新建画布</p>${rows || fallback}</div>`
 }
 
 function sidebarHtml(rail) {
@@ -1641,8 +1679,8 @@ function sidebarHtml(rail) {
     const workspace = group.workspace
     const caret = `<span class="rail-caret${group.expanded ? ' is-open' : ''}" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="m6.2 3.8 4 4.2-4 4.2"/></svg></span>`
     const workspaceRow = editing('workspace', workspace.id)
-      ? `<div class="workspace-row is-editing">${caret}${railRenameInput('workspace', workspace.id, undefined)}</div>`
-      : `<button class="workspace-row${group.active ? ' active' : ''}" type="button" data-action="toggle-rail-group" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="${group.expanded}" title="${escapeHtml(workspace.path ?? workspace.title)}">${caret}<span class="rail-workspace-name">${escapeHtml(workspace.title)}</span></button>${railMoreButton({ kind: 'workspace', id: workspace.id, title: workspace.title, label: `重命名工作区：${workspace.title}` })}${menuFor('workspace', workspace.id)}`
+      ? `<div class="rail-workspace"><div class="workspace-row is-editing">${caret}${railRenameInput('workspace', workspace.id, undefined)}</div></div>`
+      : `<div class="rail-workspace"><button class="workspace-row${group.active ? ' active' : ''}" type="button" data-action="toggle-rail-group" data-workspace="${escapeHtml(workspace.id)}" aria-expanded="${group.expanded}" title="${escapeHtml(workspace.path ?? workspace.title)}">${caret}<span class="rail-workspace-name">${escapeHtml(workspace.title)}</span></button>${railMoreButton({ kind: 'workspace', id: workspace.id, title: workspace.title, label: `重命名工作区：${workspace.title}` })}${menuFor('workspace', workspace.id)}</div>`
     if (!group.expanded) return `<section class="rail-group">${workspaceRow}</section>`
     const rows = group.canvases.map(thread => {
       const title = threadListTitle(thread)
@@ -2241,12 +2279,10 @@ function applyPermissionPreset(preset) {
 // Putting the typed text in the markup would make every keystroke change the foot's HTML, so
 // the patch would rewrite the box -- and rewriting a focused textarea loses the caret.
 function inspectorComposer(card, thread) {
-  // A checkpoint is not a turn anyone can branch from: there is no answer under it to fork at.
-  // It says so, rather than offering the dead input a turn with no answer used to get.
-  if (card.compaction === true) {
-    return '<p class="composer-note">这是上下文压缩点，不能从这里分叉。继续往下走到你想分叉的那一轮。</p>'
-  }
-  const usable = Number.isInteger(card.answer?.sourceSeq)
+  // A checkpoint is where the conversation continues from -- the summary is the first thing the
+  // next turn is given -- so it takes the ordinary composer. It used to be refused here on the
+  // grounds that nothing answers it, which had it exactly backwards.
+  const usable = Number.isInteger(card.forkSeq)
   const busy = state.inspectorSending === true || state.attaching === true || state.pendingReplies.has(thread.dshSessionId)
   // While the agent is asking, the input box waits its turn: the answer above is
   // the only thing the session will accept right now.
@@ -2368,7 +2404,9 @@ async function submitInspectorMessage(form) {
   if (card === undefined || text === '') return
   const thread = state.workspace?.threads.find(item => item.id === card.dshThreadId)
   if (thread === undefined || thread.dshSessionId === null) return setError('关联的 DSH 会话已不可用')
-  const atSeq = card.answer?.sourceSeq
+  // Ordinary turns cut at their answer; a checkpoint cuts at the turn before it, so the branch
+  // opens on the summary rather than on the history it replaced.
+  const atSeq = card.forkSeq
   if (!Number.isInteger(atSeq)) return setError('这一轮还没有回答，无法创建分支')
   pendingParts = state.attachments.map(item => item.part)
   state.inspectorInputs.delete(card.id)
@@ -2378,7 +2416,9 @@ async function submitInspectorMessage(form) {
   render()
   try {
     const position = draftPlacement(arrangedCards(state.workspace?.threads ?? []))?.position
-    await branchOff(thread, atSeq, card.id, text, position)
+    // A checkpoint's seed runs one past its own seq, so the line it starts is drawn from the
+    // checkpoint and not from the turn that happened to precede it.
+    await branchOff(thread, atSeq, card.id, text, position, card.compaction === true ? card.sourceSeq + 1 : atSeq)
     state.attachments = []
   } catch (error) {
     // Give the text back so a failed send does not lose what was typed.
@@ -2421,7 +2461,7 @@ function inspectorPanelModel() {
   if (card === undefined) return null
   const { thread } = messagesForCard(card)
   if (thread === null) return null
-  const openDshAction = `<button type="button" data-action="open-dsh" data-thread="${thread.id}" data-seq="${Number.isInteger(card.answer?.sourceSeq) ? card.answer.sourceSeq : ''}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M7 3.5H4.5A1.5 1.5 0 0 0 3 5v6.5A1.5 1.5 0 0 0 4.5 13H11a1.5 1.5 0 0 0 1.5-1.5V9"/><path d="M9.5 3.5h3v3M12.4 3.6 7.5 8.5"/></svg>在 DSH 中打开</button>`
+  const openDshAction = `<button type="button" data-action="open-dsh" data-thread="${thread.id}" data-seq="${Number.isInteger(card.compaction === true ? card.sourceSeq : card.answer?.sourceSeq) ? (card.compaction === true ? card.sourceSeq : card.answer.sourceSeq) : ''}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M7 3.5H4.5A1.5 1.5 0 0 0 3 5v6.5A1.5 1.5 0 0 0 4.5 13H11a1.5 1.5 0 0 0 1.5-1.5V9"/><path d="M9.5 3.5h3v3M12.4 3.6 7.5 8.5"/></svg>在 DSH 中打开</button>`
   const error = card.error === null ? '' : `<section class="card-inspector-error" role="alert"><strong>本轮未完成</strong><p>${escapeHtml(card.error.text)}</p></section>`
   return {
     cardId: card.id,
@@ -3026,11 +3066,6 @@ app.addEventListener('pointerdown', event => {
 // and then held for its whole life: a pan that owns the canvas is never handed
 // over to a card the pointer happens to drift across.
 // ---------------------------------------------------------------------------
-const ZOOM_MIN = .6
-// The dot graph carries no text, so it stays readable much further out than the cards do.
-const ZOOM_MIN_DOT = .1
-const ZOOM_MAX = 4
-const ZOOM_STEP = 1.25               // the +/- buttons step by ratio, not offset
 const WHEEL_PAN_SPEED = 1.25         // canvas travel per pixel of finger travel
 const WHEEL_ZOOM_PER_PIXEL = .0125   // pinch deltas are ~1-20 px per event
 const WHEEL_ZOOM_PER_NOTCH = .00275  // a mouse wheel notch is ~100-120 px
@@ -3350,8 +3385,13 @@ app.addEventListener('click', async event => {
     if (button.dataset.action === 'zoom-in') zoomCanvasAtCenter(ZOOM_STEP)
     if (button.dataset.action === 'zoom-out') zoomCanvasAtCenter(1 / ZOOM_STEP)
     if (button.dataset.action === 'toggle-canvas-style') {
-      setCanvasStyle(state.canvasStyle === 'dot' ? 'card' : 'dot')
+      const resized = setCanvasStyle(state.canvasStyle === 'dot' ? 'card' : 'dot')
       render()
+      // The two faces are read at different distances, and a camera offset calibrated for one
+      // leaves the graph off screen at the other -- at 10% everything collapses toward the world
+      // origin, which the old offset puts above the viewport. Re-anchor on the card in hand, the
+      // way 定位 does.
+      if (resized && state.mode === 'canvas') window.requestAnimationFrame(() => focusActiveCard())
     }
     if (button.dataset.action === 'focus-active') focusActiveCard()
     if (button.dataset.action === 'dismiss-error') { state.error = ''; render() }
