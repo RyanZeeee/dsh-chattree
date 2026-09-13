@@ -307,7 +307,9 @@ function railModel() {
     const ownThreads = state.workspace !== null && state.workspace.id === `dsh:${workspace.id}` ? state.workspace.threads : null
     const expanded = active || state.railOpen.has(workspace.id)
     const cached = ownThreads ?? state.railCache.get(workspace.id) ?? null
-    if (expanded && cached === null && !state.railLoading.has(workspace.id)) void loadRailGroup(workspace)
+    // Nothing is read before the store's workspace list arrives: the read comes out of that list,
+    // and an empty answer cached now would be this group's answer for the rest of the session.
+    if (expanded && cached === null && !state.railLoading.has(workspace.id) && state.summaries.length > 0) void loadRailGroup(workspace)
     return {
       workspace,
       active,
@@ -406,6 +408,9 @@ async function refreshSummaries({ renderAfter = true } = {}) {
   const body = await api('/chattree/api/workspaces')
   state.summaries = body.workspaces
   const changed = before !== JSON.stringify(state.summaries)
+  // Which workspace a canvas falls in comes from this list, so a change to it makes every group's
+  // copy stale -- including a group that read before the list arrived.
+  if (changed) state.railCache.clear()
   const selected = selectedDshWorkspace()
   if (selected !== undefined && (changed || state.workspace === null)) await openDshWorkspace(selected.id, { renderAfter })
   else if (renderAfter && changed && canReplaceView()) render()
@@ -1693,7 +1698,7 @@ function sidebarHtml(rail) {
     const body = group.canvases.length > 0 ? rows : `<p class="tree-empty">${group.loading ? '正在载入…' : '还没有画布'}</p>`
     return `<section class="rail-group">${workspaceRow}<nav class="thread-tree">${body}</nav></section>`
   }).join('')
-  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><div class="rail-new"><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button>${state.railChooser ? railChooserHtml(rail) : ''}</div><div class="rail-head"><span>工作区</span><button class="rail-add" type="button" data-action="add-workspace" aria-label="添加工作区" title="添加工作区"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></svg></button></div>${groups || '<p class="tree-empty">暂未同步工作区</p>'}`
+  return `<div class="sidebar-brand-row"><div class="brand" aria-label="Chat Tree"><strong>Chat Tree</strong></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-label="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}" title="${state.sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="1.75" width="12.5" height="12.5" rx="2.25"/><path d="M6 2v12"/></svg></button></div><div class="rail-new"><button class="new-workspace" type="button" data-action="create-session" ${state.draft !== null ? 'disabled' : ''}><svg class="new-session-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v6.5M4.75 8h6.5"/></svg><span>新画布</span></button>${state.railChooser ? railChooserHtml(rail) : ''}</div><div class="rail-head"><span>工作区</span><button class="rail-add" type="button" data-action="add-workspace" aria-label="添加工作区" title="添加工作区"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 3.6v8.8M3.6 8h8.8"/></svg></button></div><div class="rail-scroll">${groups || '<p class="tree-empty">暂未同步工作区</p>'}</div>`
 }
 
 // The rail is patched like every other region, with one exception: a rename box that is already on
@@ -1703,13 +1708,36 @@ function syncSidebar(shellElement, rail) {
   const sidebar = shellElement.querySelector('.sidebar')
   if (!(sidebar instanceof Element)) return
   if (state.railEdit !== null && sidebar.querySelector('.rail-rename') !== null) return
+  // Rewriting the region rebuilds the scroll container, which would drop the reader back to the
+  // top every time a menu opens or a title changes.
+  const scrolled = sidebar.querySelector('.rail-scroll')?.scrollTop ?? 0
   patchSlot(sidebar, sidebarHtml(rail))
+  const scroller = sidebar.querySelector('.rail-scroll')
+  if (scroller instanceof HTMLElement && scrolled > 0) scroller.scrollTop = scrolled
+  syncRailMenu(sidebar)
   if (state.railEdit === null) return
   const input = sidebar.querySelector('.rail-rename')
   if (!(input instanceof HTMLInputElement)) return
   input.value = state.railEdit.title
   input.focus()
   input.select()
+}
+
+// A row menu opens downwards, which the last row of a scrolled rail has no room for -- the scroll
+// region would cut it off. Where a row sits is not something the markup can know, so it is
+// measured after the patch and the menu is turned upwards when it has to be. Only the row menus
+// are considered: the workspace chooser sits outside the scroll region and is never clipped.
+function syncRailMenu(sidebar) {
+  const menu = sidebar.querySelector('.rail-scroll .rail-menu')
+  if (!(menu instanceof HTMLElement)) return
+  const row = menu.parentElement
+  if (!(row instanceof HTMLElement)) return
+  const scroller = sidebar.querySelector('.rail-scroll')
+  const box = (scroller ?? sidebar).getBoundingClientRect()
+  const anchor = row.getBoundingClientRect()
+  const fitsBelow = anchor.bottom + menu.offsetHeight <= box.bottom
+  const fitsAbove = anchor.top - menu.offsetHeight >= box.top
+  menu.classList.toggle('is-above', !fitsBelow && fitsAbove)
 }
 
 // Commit what is in the box. Blank or unchanged is dropped rather than sent: DSH refuses a blank

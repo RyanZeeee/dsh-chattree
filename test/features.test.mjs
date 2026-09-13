@@ -483,3 +483,24 @@ test('the dot face opens at its own distance, and the canvas follows it there', 
   // The constants are read while the initial state is built, so they must be declared before it.
   assert.ok(app.indexOf('const ZOOM_MIN_DOT') < app.indexOf('zoom: savedCanvasStyle'), 'the zoom constants are declared after the state that reads them')
 })
+
+test('a full rail scrolls, and its popovers survive the scroll region', () => {
+  // The rail had no scroll container at all: a full list overflowed the sidebar, the shell clipped
+  // it, and the rows past the fold were neither visible nor reachable by any gesture.
+  has(app, '<div class="rail-scroll">', 'the groups are not in a scroll region')
+  has(css, 'flex: 1 1 auto; min-height: 0;', 'the region cannot shrink, which is what makes it scroll rather than overflow')
+  has(css, 'overflow-y: auto; overflow-x: hidden;', 'the cross axis is not pinned, and auto on one axis clips the other too')
+  assert.ok(app.indexOf('<div class="rail-scroll">') > app.indexOf('class="rail-head"'), 'the heading scrolls away with the list')
+  // Rewriting the region rebuilds the container, which would drop the reader back to the top.
+  has(app, "const scrolled = sidebar.querySelector('.rail-scroll')?.scrollTop ?? 0", 'the scroll position is not read before the patch')
+  has(app, "if (scroller instanceof HTMLElement && scrolled > 0) scroller.scrollTop = scrolled", 'and not put back after it')
+  // A row at the bottom has no room below it inside that region, so the menu turns upwards -- which
+  // can only be decided by measuring, after the patch.
+  has(css, '.rail-menu.is-above { top: auto; bottom: calc(100% + 2px); }', 'the menu has no upward face')
+  has(app, 'function syncRailMenu(sidebar)', 'nothing measures where a menu has room')
+  has(app, "menu.classList.toggle('is-above', !fitsBelow && fitsAbove)", 'the measurement decides nothing')
+  // A group is read out of the store's workspace list, so it must not be read before that list is
+  // known: an empty answer cached then stood as the group's answer for the rest of the session.
+  has(app, '&& state.summaries.length > 0) void loadRailGroup(workspace)', 'a group is read before the list it reads out of')
+  has(app, 'if (changed) state.railCache.clear()', 'a changed workspace list leaves every group stale')
+})

@@ -55,6 +55,10 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 .rail-rename { width: 100%; min-width: 0; height: 24px; border: 1px solid var(--ct-accent, #3478f6); border-radius: 6px; background: #fff; padding: 0 7px; color: #111827; font: inherit; font-size: 12px; }
 .rail-rename:focus { outline: none; }
 .workspace-row.is-editing, .tree-item.is-editing { padding: 0; }
+/* Everything below the heading scrolls; the brand row, the new-canvas button and the heading stay
+   put. `min-height: 0` is what lets a flex child shrink below its content, which is the whole
+   difference between scrolling and overflowing here. */
+.rail-scroll { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-bottom: 4px; scrollbar-color: #c3ccd8 transparent; scrollbar-width: thin; }
 .rail-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 4px 2px; color: #7c8798; font-size: 12px; }
 .rail-add { display: grid; width: 22px; height: 22px; place-items: center; border: 0; border-radius: 5px; background: transparent; padding: 0; color: #64748b; cursor: pointer; }
 .rail-add:hover { background: #e5e7eb; color: #111827; }
@@ -67,6 +71,8 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
    of the window. */
 .rail-new { position: relative; }
 .rail-chooser { top: calc(100% + 6px); right: 2px; left: 2px; min-width: 0; }
+/* A row near the bottom of the scroll region opens its menu upwards instead of being cut off. */
+.rail-menu.is-above { top: auto; bottom: calc(100% + 2px); }
 .rail-menu-title { margin: 0; padding: 5px 8px 6px; color: #8a97a8; font-size: 11px; }
 .rail-menu-row { display: block; width: 100%; min-height: 26px; border: 0; border-radius: 6px; background: transparent; padding: 4px 8px; color: #374151; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .rail-menu-row:hover { background: #f3f4f6; color: #111827; }
@@ -409,6 +415,7 @@ button.primary:hover { border-color: #000; background: #000; color: #fff; }
 [data-theme="dark"] .rail-add:hover { background: #2a2d33; color: #e6e8eb; }
 [data-theme="dark"] .rail-rename { border-color: var(--ct-accent); background: #15171b; color: #e6e8eb; }
 [data-theme="dark"] .rail-menu { border-color: var(--ct-border); background: var(--ct-surface); }
+[data-theme="dark"] .rail-scroll { scrollbar-color: #4a4f57 transparent; }
 [data-theme="dark"] .rail-menu-row { color: #b6bcc6; }
 [data-theme="dark"] .rail-menu-row:hover { background: #26282d; color: #e6e8eb; }
 [data-theme="dark"] .rail-head { color: #8f959e; }
