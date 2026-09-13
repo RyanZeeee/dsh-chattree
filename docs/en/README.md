@@ -2,63 +2,66 @@
 
 **Turn a linear chat log into a conversation map you can read at a glance and click into.**
 
-Chat Tree is a plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH). It adds a
-**Chat Tree** view: every turn becomes a node on a canvas, so where a question came from and
-what grew out of it are visible at once.
+Chat Tree is a plugin for [DeepSeek Harness](https://github.com/deepseek-ai) (DSH). It adds a **Chat Tree** view: every turn becomes a node on a canvas, so where a question came from and what grew out of it are visible at once.
 
 ## The interface
 
-**Dot canvas** — only nodes and lines. The nodes carry no text; hovering one brings up the
-question you asked. The whole shape reads in one look.
+**Dot mode** — only nodes and connectors, with no text on a node; hover to bring up the question you asked. The whole shape reads at once.
 
 ![The dot canvas](../images/dot-mode.png)
 
-**Card canvas** — every node is a card, so you read the turns directly. Selecting a node
-highlights the whole path from it back to the first turn.
+**Card mode** — every node is a card, so the turn reads directly. Select one node and the whole path from the root to it highlights.
 
 ![The card canvas](../images/card-mode.png)
 
-The panel on the right shows the full question and answer for the selected turn, and you can
-keep asking from there — which grows a new branch out of that turn.
+The right-hand panel shows the selected turn in full, and you can ask on from there — which forks a new line out of that turn.
 
 ## What it solves
 
-Chat long enough in DSH and the record becomes one long line: to find "which turn was that
-plan discussed in" you scroll upward, and to take a different direction from some turn you
-risk disturbing the context around it.
+Chat in DSH for long enough and the record becomes one very long line: to find "which turn was that plan in" you scroll back through everything, and to **take a different direction from a turn** you risk tangling the context you already have.
 
-Chat Tree turns both into something you can see: **every turn is a node, every question is a
-new branch**. The original line is always kept; a new idea grows out of the fork.
+Chat Tree turns both into something you can see and click: **one turn is one node, and every question is a new branch** — the original line is always kept, and a new idea grows out of the fork.
 
 ## Features
 
 ### Canvas and nodes
-- **One turn, one card node**, laid out top to bottom in order, joined parent to child by a
-  smooth curve
-- **Every question forks**: asking on from a turn grows a new line out of that turn without
-  touching the original
-- **Click a node to read it**: the right-hand panel shows the full turn, and you can ask from
-  there
-- **Branch highlight**: selecting a node highlights the whole path from the root to it, so you
-  can see where that turn came from
-- **Archive**: hides a node and everything downstream of it from the canvas (the DSH session
-  is never deleted)
+- **One turn = one card node**, laid out top to bottom in order, joined parent to child by a smooth curve
+- **Every question forks**: asking on from a turn grows a new line out of that turn without touching the original
+- **Click a node to read it**: the right-hand panel shows the full turn, and you can ask from there
+- **Branch highlight**: selecting a node highlights the whole path from the root to it, so you can see where that turn came from
+- **Archive**: hides a node and everything downstream of it from the canvas (the DSH session is never deleted)
 - **Tidy**: re-arrange by level in one click; **Locate**: bring the view back to the newest turn
-- **Drag and zoom**: drag to pan, wheel or trackpad to zoom, drag a node to move it (the
-  position is remembered)
+- **Drag and zoom**: drag to pan, wheel or trackpad to zoom, drag a node to move it (the position is remembered)
 
-### Dot canvas (minimal view)
-One click from the bottom-left. In dot mode there are **no cards**, only dots and lines:
+### The rail: workspaces, then canvases
 
-- one dot = one turn, with **no text on the node**
-- **hover** to bring up **the question you asked** (elided past 50 characters)
-- the tooltip **does not scale with the canvas**, so it stays the same size at every zoom
-- zooms out to **10%** (the card canvas stops at 60%), for taking in the whole graph
+The rail has two levels: **workspaces** (directories DSH knows about), and the **canvases** inside each one.
 
-### Both modes share one arrangement
-Switching modes **never moves a node**. The rules are always: a child sits one row below its
-parent, each row is filled left to right with no gaps, and **a child sits beside its parent's
-column** (so connectors never cross).
+- Clicking a workspace row **folds or unfolds** it; the workspace holding the current canvas stays open, and the folded state is remembered
+- Clicking a canvas row opens that canvas
+- **⋯** at the end of either row → **rename**. The name is **written back to DSH**, so DSH's own sidebar shows the same one, and renaming on either side is the same rename
+- **+** beside the workspace heading opens the system directory picker and adds the chosen directory as a workspace (one that is already there is reported, not added twice)
+- **New canvas** at the top asks **which workspace** first, then creates the session in that directory
+
+### The buttons around the composer
+
+Bottom of the right-hand panel:
+
+| Button | What it does |
+|---|---|
+| **Attach** | Sends files with this question |
+| **Permission** | Switches DSH's permission preset; a preset that **lifts the sandbox / stops asking each time** asks you to confirm first |
+| **Model** | Picks the model and reasoning effort for this session (grouped by provider) |
+| **Context** | The ring is context occupancy; open it for the percentage and how much of it is **system prompt / tools / conversation** |
+| **Send** | Enter sends, Shift+Enter adds a newline |
+
+When the matching DSH interface is missing (a build with no model catalogue, say), that button is absent and the menu says why.
+
+### Compacting the context
+
+**Compact context** in the context menu calls DSH's `/compact`: the session history is replaced by a summary, and the conversation carries on above it.
+
+It leaves a **green node** on the canvas — a green card in card mode, a green dot in dot mode — headed *context compacted*, holding that summary. **You can continue the conversation from it**: ask there and the new branch's history starts at the summary.
 
 ## Install
 
@@ -68,21 +71,19 @@ column** (so connectors never cross).
 
 ### From GitHub (recommended)
 
-**DSH Desktop**: open the DSH Desktop terminal, where the profile defaults to `desktop`:
+**DSH Desktop**: open the terminal inside DSH Desktop, where the profile is `desktop` by default:
 
 ```bash
 dsh plugin add "github:RyanZeeee/dsh-chattree"
 ```
 
-**Plain CLI** (`dsh web` and friends): `--profile` is required, and `desktop` is not a
-valid value there:
+**Plain command line** (`dsh web` and other profiles): `--profile` is required:
 
 ```bash
 dsh plugin --profile <name> add "github:RyanZeeee/dsh-chattree"
 ```
 
-Append `#v1.1.0` to pin a version. Restart that profile. A **Chat Tree** button appears in
-the view switch at the top of the window.
+Restart that profile and **Chat Tree** appears in the view switcher at the top.
 
 ### From a clone
 
@@ -99,62 +100,24 @@ git clone https://github.com/RyanZeeee/dsh-chattree.git
 cd dsh-chattree
 dsh plugin --profile <name> add "$PWD"
 
-pnpm install     # no third-party dependencies; only needed for the scripts
-pnpm test        # layout rules + behaviour locks
-pnpm run build   # syntax check on the three JS files
+pnpm install     # no third-party dependencies; only for the scripts
+pnpm test        # arrangement rules + behaviour locks
+pnpm run build   # syntax check of the three JS files
 ```
 
-After changing `app.js` or `styles.css`: refresh the DSH window.
-After changing `index.js` or `client.js`: restart DSH.
-
-The plugin is not on npm yet, so installing by package name
-(`dsh plugin add dsh-chattree`) does not work — install it from GitHub.
-
-## Usage
-
-1. Open any DSH conversation
-2. Click **Chat Tree** in the middle of the top bar
-3. Start talking — every question adds a node to the canvas
-
-| What you want | How |
-|---|---|
-| Read a turn in full | Click it |
-| Take a different direction from a turn | Click it → ask in the right-hand panel (forks automatically) |
-| Change how the canvas looks | Last button in the bottom-left (dot / card) |
-| Re-arrange | **Tidy** in the bottom-left |
-| Go back to the newest turn | **Locate** in the bottom-left |
-| Zoom out for the whole picture | Wheel / trackpad; dot mode goes to 10% |
-| Send from the right-hand panel | **Enter** sends, **Shift+Enter** for a newline |
-| Collapse the left rail | Button at the top of the rail (leaves one icon) |
-| Lay nodes out yourself | Drag them; positions are remembered (**Tidy** restores the standard arrangement) |
-
-### Reading the state
-
-| What you see | What it means |
-|---|---|
-| A node **pulsing** | The assistant is replying |
-| A node in **red** | That turn failed; open it for the reason |
-| A **solid blue** node | The one you selected |
-| A **pale blue** node | It lies on the path to your selection |
-| A **dark blue** connector | Belongs to the selected node's line |
+Changing `app.js` or `styles.css`: refresh the DSH page.
+Changing `index.js` or `client.js`: restart DSH.
 
 ## Where your data lives
 
 - Canvas structure (node links, arrangement, archive roots) is stored in DSH's own data directory
 - **Conversation content is still kept by DSH**; the plugin neither changes nor copies it
-- The plugin **does not use the network**: every request goes back to DSH itself
-  (`/chattree/api/*`), with no external calls
+- View preferences (node positions, rail folds, canvas mode and zoom, quick phrases, panel width) stay in the browser
+- The plugin **does not use the network**: every request goes back to DSH itself (`/chattree/api/*`), with no external calls
 
 ## Permissions and bounds
 
-DSH STORE inspects the runtime source statically at a fixed commit. The four things it asks for are
-stated here in one place.
-
-**Dependencies**: none at runtime. The host half uses only Node built-ins (`node:fs/promises`,
-`node:crypto`, `node:path`, `node:url`) and imports no `@deepseek-ai/*` package; it talks to DSH
-through service names (`webServer`, `sessions`) and the `remote.*` namespaces. The client half
-(`client.js`) injects `@deepseek-ai/dsh-client-runtime` (`dsh.client.inject`) — supplied by DSH's
-client module loader, not an npm dependency.
+**Dependencies**: none at runtime. The host half uses only Node built-ins (`node:fs/promises`, `node:crypto`, `node:path`, `node:url`) and imports no `@deepseek-ai/*` package; it talks to DSH through service names (`webServer`, `sessions`) and the `remote.*` namespaces. The client half (`client.js`) injects `@deepseek-ai/dsh-client-runtime` (`dsh.client.inject`) — supplied by DSH's client module loader, not an npm dependency.
 
 **Permissions** — this is the whole list:
 
@@ -165,21 +128,15 @@ client module loader, not an npm dependency.
 | Commands | No subprocess, no shell |
 | Credentials | No secrets read from the environment, no token held |
 
-**External services**: none. No third-party host, no telemetry, no model call of its own — every
-model call happens inside the DSH session you are already using.
+**External services**: none. No third-party host, no telemetry, no model call of its own — every model call happens inside the DSH session you are already using.
 
 **Failure bounds**:
 
 - Data file missing → an empty graph is created; your sessions are untouched
-- Data file corrupt or unreadable → the read is refused and **the path is reported**; your data is
-  not silently overwritten. Canvas requests fail, DSH itself keeps running — mounting the plugin
-  does not depend on that read
-- Two instances at once → the PID lock stops them overwriting each other; a lock whose owner is gone
-  is reclaimed, with one warning on stderr
-- An optional DSH interface missing (model catalogue, command list) → those buttons stay out of the
-  composer and say why in the menu; everything else works
-- One unreadable session history → a warning is logged and that session is skipped; live projection
-  is unaffected
+- Data file corrupt or unreadable → the read is refused and **the path is reported**; your data is not silently overwritten. Canvas requests fail, DSH itself keeps running — mounting the plugin does not depend on that read
+- Two instances at once → the PID lock stops them overwriting each other; a lock whose owner is gone is reclaimed, with one warning on stderr
+- An optional DSH interface missing (model catalogue, command list) → those buttons stay out of the composer and say why in the menu; everything else works
+- One unreadable session history → a warning is logged and that session is skipped; live projection is unaffected
 - Uninstall → the routes go with it; `workspaces.json` is left in place (delete it to remove it)
 
 **To check it yourself** (in a disposable profile, leaving your own alone):
@@ -197,8 +154,7 @@ rm -rf ~/.dsh/profiles/chattree-check                                    # remov
 - DeepSeek Harness 2.0.9 or newer
 - Node.js 22.19+
 
-Works in DSH Desktop and in a plain `dsh web` profile alike: the plugin only uses the
-ordinary DSH contract and never touches Desktop's `desktopProfiles` / `desktopPnpm`.
+Both DSH Desktop and a plain `dsh web` profile work: the plugin depends only on the official DSH contract, and uses no Desktop-specific `desktopProfiles` / `desktopPnpm`.
 
 ## License
 

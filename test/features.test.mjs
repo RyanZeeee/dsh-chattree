@@ -532,3 +532,46 @@ test('both READMEs state the same permissions and bounds', () => {
     }
   }
 })
+
+test('the two READMEs stay in step', () => {
+  // A feature lands in the code and one language keeps describing the app as it was: the Chinese
+  // half lost five sections that way. The pairs are listed rather than counted so a section added
+  // to one side has to be added here, and to the other side, before the suite is green again.
+  const pairs = [
+    ['## 界面', '## The interface'],
+    ['## 它解决什么问题', '## What it solves'],
+    ['## 功能', '## Features'],
+    ['### 画布与节点', '### Canvas and nodes'],
+    ['### 左侧栏：工作区 → 画布', '### The rail: workspaces, then canvases'],
+    ['### 输入框边上的几个按钮', '### The buttons around the composer'],
+    ['### 压缩上下文', '### Compacting the context'],
+    ['## 安装', '## Install'],
+    ['### 前置条件', '### Requirements'],
+    ['### 从 GitHub 安装（推荐）', '### From GitHub (recommended)'],
+    ['### 从克隆安装', '### From a clone'],
+    ['### 本地开发', '### Local development'],
+    ['## 你的数据在哪里', '## Where your data lives'],
+    ['## 权限与边界', '## Permissions and bounds'],
+    ['## 环境要求', '## Requirements'],
+    ['## 许可', '## License']
+  ]
+  const zh = read('README.md')
+  const en = read('docs/en/README.md')
+  for (const [z, e] of pairs) {
+    has(zh, z, `README.md has no ${z}`)
+    has(en, e, `docs/en/README.md has no ${e}`)
+  }
+  const sections = text => (text.match(/^#{2,3} /gm) ?? []).length
+  assert.equal(sections(zh), sections(en), 'the two READMEs have different numbers of sections')
+  // The buttons the composer section names, in the language each half is written in.
+  for (const label of ['附件', '权限', '模型', '上下文']) has(zh, label, `README.md does not mention ${label}`)
+  for (const label of ['Attach', 'Permission', 'Model', 'Context']) has(en, label, `docs/en/README.md does not mention ${label}`)
+  // And the four things the store asks for in writing, in both.
+  for (const text of [zh, en]) for (const claim of ['workspaces.json', 'trustedHosts', '403']) has(text, claim, `a README does not state ${claim}`)
+  // The disposable-profile evidence the store asks for by name: install, start, uninstall.
+  for (const text of [zh, en]) {
+    has(text, '--from-default-profile web', 'a README has no disposable-profile evidence')
+    has(text, 'plugin --profile chattree-check add', 'a README does not show the install step')
+    has(text, 'remove dsh-chattree', 'a README does not show the uninstall step')
+  }
+})
