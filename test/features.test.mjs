@@ -435,3 +435,28 @@ test('every rail popover is anchored to the box it belongs to', () => {
   has(css, '.rail-chooser { top: calc(100% + 6px);', 'the chooser does not hang off the button')
   has(app, '<div class="rail-new">', 'the chooser is not rendered beside its button')
 })
+
+test('every DSH namespace call is read out of its envelope', () => {
+  // The gateway answers every namespace call with `{ok, value}` or `{ok, error}`. `pick` was the
+  // one call read as if it answered the bare value, so the path handed to `workspace/create` was
+  // the envelope object -- and DSH's strict request schema refused it with
+  // `client api: workspace/create rejected "request"`, which is the popup that came of it.
+  has(client, 'const picked = await picker.pick()', 'the chooser answer is not held as an envelope')
+  has(client, 'const path = picked?.value', 'and its value is what is unwrapped')
+  assert.ok(!/const path = await picker/.test(client), 'the chooser answer is used as a bare value again')
+  // The bridge's other namespace calls. Each one checks `ok` before it reads a value; a call that
+  // forgets is how the above got through.
+  const calls = [
+    { call: 'await commands.list(sessionId)', check: 'listed?.ok !== false' },
+    { call: "await commands.execute(sessionId, '/compact', [])", check: 'response?.ok === false' },
+    { call: 'await workspace.rename({ workspaceId, title })', check: 'response?.ok === false' },
+    { call: 'await session.rename({ sessionId, title })', check: 'response?.ok === false' },
+    { call: 'await picker.pick()', check: 'picked?.ok === false' },
+    { call: 'await workspace.create({ path })', check: 'response?.ok === false' }
+  ]
+  for (const { call, check } of calls) {
+    const at = client.indexOf(call)
+    assert.notEqual(at, -1, `missing ${call}`)
+    assert.ok(client.slice(at, at + 400).includes(check), `${call} does not check its envelope`)
+  }
+})

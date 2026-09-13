@@ -567,8 +567,12 @@ window.__ModuleLoader__.load({
             const workspace = remoteNamespace('workspace')
             if (picker === undefined || typeof picker.pick !== 'function') throw new Error('DSH 未提供目录选择器')
             if (workspace === undefined || typeof workspace.create !== 'function') throw new Error('DSH 未提供工作区接口')
-            const path = await picker.pick()
-            // A cancelled chooser is not a failure: the reader changed their mind.
+            const picked = await picker.pick()
+            if (picked?.ok === false) throw new Error(picked.error?.message ?? '无法打开目录选择器')
+            // Every namespace call answers an envelope, so the path is its `value` -- passing the
+            // envelope itself is what made DSH reject the create request. A cancelled chooser
+            // answers with no path at all, which is not a failure: the reader changed their mind.
+            const path = picked?.value
             if (path === null || path === undefined) return send('chattree:workspace-added', { requestId, cancelled: true })
             const response = await workspace.create({ path })
             if (response?.ok === false) throw new Error(response.error?.message ?? 'DSH 未能添加工作区')

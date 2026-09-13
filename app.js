@@ -3610,9 +3610,10 @@ window.addEventListener('message', event => {
     else render()
   }
   if (data.type === 'chattree:rename-failed') {
-    // DSH refuses a blank or already-taken name; the box stays open with the old name.
+    // DSH refuses a blank, over-long or already-taken name. Its own words are kept, with the
+    // action in front of them: the message alone reads like a fault in the harness.
     state.railEdit = null
-    setError(new Error(typeof data.message === 'string' ? data.message : '重命名失败'))
+    setError(new Error(typeof data.message === 'string' && data.message !== '' ? `重命名失败：${data.message}` : '重命名失败'))
     render()
   }
   if (data.type === 'chattree:workspace-added') {
@@ -3622,7 +3623,7 @@ window.addEventListener('message', event => {
     render()
   }
   if (data.type === 'chattree:workspace-add-failed') {
-    setError(new Error(typeof data.message === 'string' ? data.message : '添加工作区失败'))
+    setError(new Error(typeof data.message === 'string' && data.message !== '' ? `添加工作区失败：${data.message}` : '添加工作区失败'))
     render()
   }
   if (data.type === 'chattree:compacted') {
